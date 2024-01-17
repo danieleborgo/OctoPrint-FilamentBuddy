@@ -1,0 +1,591 @@
+<!--
+FilamentBuddy OctoPrint plugin
+Copyright (C) 2024 Daniele Borgo
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<div class="row-fluid">
+
+    <div class="tabbable">
+
+        <h3>Filament Buddy</h3>
+
+        <ul class="nav nav-tabs" id="tabs">
+            <li class="active"><a data-toggle="tab" href="#filamentbuddy_changer">Filament Changer</a></li>
+            <li><a data-toggle="tab" href="#filamentbuddy_sensor">Filament Sensor</a></li>
+            <li><a data-toggle="tab" href="#filamentbuddy_remover">Filament Remover</a></li>
+        </ul>
+
+        <div class="tab-content">
+            <div id="filamentbuddy_changer" class="tab-pane active">
+                <form class="form-horizontal">
+
+                    <div>
+                        Filament Changer allows to switch filament during a print via buttons in
+                        <a href="#control"><i>Control</i></a>.
+                    </div>
+                    <hr>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="checked: filamentbuddy.fc.en">
+                                Enable Filament Changer
+                            </label>
+                            <label data-bind="visible: server_fc_en() != filamentbuddy.fc.en()">
+                                Reload this web page <b>after saving</b> to make this effective.
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Generated commands</label>
+                        <div class="controls">
+                            <label class="hide-text-when-disabled">
+                                Unload command
+                                <br>
+                                <textarea readonly rows="3"
+                                          style="background: transparent"
+                                          data-bind="value: gen_unload_com"></textarea>
+                                <button class="btn btn-small" data-bind="enable: filamentbuddy.fc.en,
+                                                                         click: unloadFilament">Try</button>
+                                <br>
+                                Load command
+                                <br>
+                                <textarea readonly rows="3"
+                                          style="background: transparent"
+                                          data-bind="value: gen_load_com"></textarea>
+                                <button class="btn btn-small" data-bind="enable: filamentbuddy.fc.en,
+                                                                         click: loadFilament">Try</button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Command mode</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fc.en,
+                                                   value: filamentbuddy.fc.command_mode">
+                                    <!-- Use G-code command without specify their parameters -->
+                                    <option value="simplified">Use pure G-code commands</option>
+                                    <!-- Use G-code command specifying their parameters -->
+                                    <option value="complete">Use G-code commands with parameters</option>
+                                    <!-- Use user defined commands -->
+                                    <option value="manual">Use user-defined commands</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.command_mode')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() != 'manual'">
+                        <label class="control-label">G-code command</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fc.en() &&
+                                                           filamentbuddy.fc.command_mode() != 'manual',
+                                                   value: filamentbuddy.fc.command">
+                                    <option value="g1">G1</option>
+                                    <option value="m600">M600</option>
+                                    <option value="m70X">M701 and M702</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.command')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() !== 'manual' &&
+                                                                   filamentbuddy.fc.command() === 'g1'">
+                        <div class="controls">
+                            <div class="input-append">
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.fc.en() &&
+                                                                              filamentbuddy.fc.command_mode() !== 'manual' &&
+                                                                              filamentbuddy.fc.command() === 'g1',
+                                                                      checked: filamentbuddy.fc.force_cold">
+                                    Force command (read <a data-bind="click: showInfo.bind($data, 'fc.force_cold')">
+                                    this note</a>)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'complete'">
+                        <label class="control-label">Filament length</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="1" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'complete',
+                                                  value: filamentbuddy.fc.filament_length">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.filament_length')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'complete' &&
+                                                                   filamentbuddy.fc.command() === 'g1'">
+                        <label class="control-label">Maximum speed</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'complete' &&
+                                                          filamentbuddy.fc.command() === 'g1',
+                                                  value: filamentbuddy.fc.filament_speed">
+                                <span class="add-on unit-of-measure">mm/min</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.filament_speed')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'complete' &&
+                                                                   filamentbuddy.fc.command() === 'm600'">
+                        <label class="control-label">Target x</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'complete' &&
+                                                          filamentbuddy.fc.command() === 'm600',
+                                                  value: filamentbuddy.fc.target_x">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.target_xy')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'complete' &&
+                                                                   filamentbuddy.fc.command() === 'm600'">
+                        <label class="control-label">Target y</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'complete' &&
+                                                          filamentbuddy.fc.command() === 'm600',
+                                                  value: filamentbuddy.fc.target_y">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.target_xy')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'complete'">
+                        <label class="control-label">Z hop</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'complete',
+                                                  value: filamentbuddy.fc.z_hop">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.z_hop')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'manual'">
+                        <label class="control-label">Unload command</label>
+                        <div class="controls">
+                            <label>
+                                <textarea rows="3" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'manual',
+                                                  value: filamentbuddy.fc.unload_command">
+                                </textarea>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fc.command_mode() === 'manual'">
+                        <label class="control-label">Load command</label>
+                        <div class="controls">
+                            <label>
+                                <textarea rows="3" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en() &&
+                                                          filamentbuddy.fc.command_mode() === 'manual' &&
+                                                          !filamentbuddy.fc.use_unload(),
+                                                  value: filamentbuddy.fc.load_command">
+                                </textarea>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.fc.en() &&
+                                                                              filamentbuddy.fc.command_mode() === 'manual',
+                                                                      checked: filamentbuddy.fc.use_unload">
+                                    Use the same as unload command
+                                </label>
+                            </label>
+
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Minimum tool temperature</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fc.en,
+                                                  value: filamentbuddy.fc.min_tool_temp">
+                                <span class="add-on unit-of-measure">°C</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fc.min_tool_temp')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <button class="btn btn-primary"
+                                    data-bind="enable: filamentbuddy.fc.en,
+                                               click: resetFilamentChanger">
+                                Reset to default
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div id="filamentbuddy_sensor" class="tab-pane">
+                <form class="form-horizontal">
+
+                    <div>
+                        Filament Sensor allows itself.
+                    </div>
+                    <hr>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="checked: filamentbuddy.fs.en">
+                                Enable Filament Sensor
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">BCM sensor pin</label>
+                        <div class="controls">
+                            <label>
+                                GPIO
+                                <input type="number" min="0" step="1" max="40"
+                                       class="input-large hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en,
+                                                  value: filamentbuddy.fs.sensor_pin">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.sensor_pin')">
+                                    &#9432;
+                                </button>
+                            </label>
+                            <label>
+                                Don't know how to select the BCM pin? Check
+                                <a target="_blank" href="https://plugins.octoprint.org/plugins/gpiostatus/">
+                                this plugin</a>.
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Sensor mode</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fs.en,
+                                                   value: filamentbuddy.fs.sensor_mode">
+                                    <option value="polling">Polling</option>
+                                    <option value="interrupt">Interrupt</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.sensor_mode')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.sensor_mode() === 'polling'">
+                        <label class="control-label">Polling time</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="1" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() &&
+                                                          filamentbuddy.fs.sensor_mode() === 'polling',
+                                                  value: filamentbuddy.fs.polling_time">
+                                <span class="add-on unit-of-measure">s</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.polling_time')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Run out time</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="1" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en,
+                                                  value: filamentbuddy.fs.run_out_time">
+                                <span class="add-on unit-of-measure">s</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.run_out_time')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Run out command</label>
+                        <div class="controls">
+                            <label style="padding-top: 5px">
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.fs.en,
+                                                                      checked: filamentbuddy.fs.use_pause">
+                                    Pause the print in OctoPrint
+                                </label>
+                                <textarea rows="3" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en(),
+                                                  value: filamentbuddy.fs.run_out_command">
+                                </textarea>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.run_out_com_pause')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Empty sensor voltage</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fs.en,
+                                                   value: filamentbuddy.fs.empty_voltage">
+                                    <option value="high">High (3.3V)</option>
+                                    <option value="low">Low (0V)</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.empty_voltage')">
+                                    &#9432;
+                                </button>
+                            </label>
+                            <label>
+                                Raspberry will <b>pull-<span data-bind="text: filamentbuddy.fs.empty_voltage() === 'high' ?
+                                                                              'up' : 'down'"></span></b> the pin.
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="enable: filamentbuddy.fs.en,
+                                                  checked: filamentbuddy.fs.toolbar_en">
+                                Show toolbar indicator
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.toolbar_en">
+                        <label class="control-label">Toolbar update time</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="1" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.toolbar_en(),
+                                                  value: filamentbuddy.fs.toolbar_time">
+                                <span class="add-on unit-of-measure">s</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.toolbar_time')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <button class="btn btn-primary"
+                                    data-bind="enable: filamentbuddy.fs.en,
+                                               click: resetFilamentSensor">
+                                Reset to default
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div id="filamentbuddy_remover" class="tab-pane">
+                <form class="form-horizontal">
+
+                    <div>
+                        Filament Remover pulls out the filament after a print completion
+                        to allow its removal also when cold.
+                    </div>
+                    <hr>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="checked: filamentbuddy.fr.en">
+                                Enable Filament Remover
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Command mode</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fr.en,
+                                                   value: filamentbuddy.fr.command_mode">
+                                    <option value="simplified">Use user-defined lengths</option>
+                                    <option value="manual">Use user-defined commands</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fr.command_mode')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.command_mode() === 'simplified'">
+                        <label class="control-label">Length to retract</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fr.en() &&
+                                                          filamentbuddy.fr.command_mode() === 'simplified',
+                                                  value: filamentbuddy.fr.retract_length">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fr.length')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.command_mode() === 'simplified'">
+                        <label class="control-label">Length to extrude</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fr.en() &&
+                                                          filamentbuddy.fr.command_mode() === 'simplified',
+                                                  value: filamentbuddy.fr.extrude_length">
+                                <span class="add-on unit-of-measure">mm</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fr.length')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.command_mode() === 'simplified'">
+                        <div class="controls">
+                            <div class="input-append">
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.fr.en() &&
+                                                                              filamentbuddy.fr.command_mode() === 'simplified',
+                                                                      checked: filamentbuddy.fr.force_cold">
+                                    Force command (read <a data-bind="click: showInfo.bind($data, 'fc.force_cold')">
+                                    this note</a>)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.command_mode() === 'manual'">
+                        <label class="control-label">Retract command</label>
+                        <div class="controls">
+                            <label>
+                                <textarea rows="3" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fr.en() &&
+                                                          filamentbuddy.fr.command_mode() === 'manual',
+                                                  value: filamentbuddy.fr.retract_command">
+                                </textarea>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.command_mode() === 'manual'">
+                        <label class="control-label">Extrude command</label>
+                        <div class="controls">
+                            <label>
+                                <textarea rows="3" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fr.en() &&
+                                                          filamentbuddy.fr.command_mode() === 'manual' &&
+                                                          !filamentbuddy.fr.use_unload(),
+                                                  value: filamentbuddy.fr.extrude_command">
+                                </textarea>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.fr.en() &&
+                                                                              filamentbuddy.fr.command_mode() === 'manual',
+                                                                      checked: filamentbuddy.fr.use_unload">
+                                    Use the same as unload command
+                                </label>
+                            </label>
+
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <button class="btn btn-primary"
+                                    data-bind="enable: filamentbuddy.fr.en,
+                                               click: resetFilamentRemover">
+                                Reset to default
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
