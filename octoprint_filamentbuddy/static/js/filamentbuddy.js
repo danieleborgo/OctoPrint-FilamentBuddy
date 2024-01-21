@@ -90,6 +90,9 @@ $(function () {
                 self.updateFilamentStatus()
 
             // Filament remover
+            self.filamentbuddy.fr.min_needed_temp.subscribe(
+                value => self.filamentbuddy.fr.min_needed_temp(self.makeInteger((value)))
+            );
             self.filamentbuddy.fr.retract_length.subscribe(
                 value => self.filamentbuddy.fr.retract_length(self.makeInteger(value))
             );
@@ -153,7 +156,7 @@ $(function () {
 
         self.requireReset = (reset) => {
             self.askConfirmationBeforeExecuting(
-                "This operation will reset this section.<br>Remember to save after this operation.",
+                "This operation will reset this section.<br>Remember to save.",
                 reset
             );
         }
@@ -385,6 +388,8 @@ $(function () {
                 let def = self.filamentbuddy.default;
 
                 self.filamentbuddy.fr.en(def.fr.en());
+                self.filamentbuddy.fr.hook_mode(def.fr.hook_mode())
+                self.filamentbuddy.fr.min_needed_temp(def.fr.min_needed_temp())
                 self.filamentbuddy.fr.command_mode(def.fr.command_mode());
                 self.filamentbuddy.fr.retract_length(def.fr.retract_length());
                 self.filamentbuddy.fr.extrude_length(def.fr.extrude_length());
@@ -501,6 +506,24 @@ $(function () {
                 ]
             },
             "fr": {
+                "hook_mode": [
+                    "Hook mode",
+                    "The filament can be inserted or removed in several different occasions. This plugin supports " +
+                    "two options:<ul>" +
+                    "<li>The insertion is performed before starting the G-code file and it is removed after its last " +
+                    "instruction.</li>" +
+                    "<li>The insertion is performed as soon as the nozzle becomes enough hot and removed when the " +
+                    "nozzle target temperature is set to 0°C.</li></ul><br><br>" +
+                    "Note that the second option consists in injecting G-code during a print so two conditions must " +
+                    "be satisfied: the nozzle has to wait for the first warming procedure (usually done by the " +
+                    "command <i>M109</i>) and the printer has to set its nozzle temperature to zero Celsius degree " +
+                    "when done. Luckly these conditions are usually always satisfied, so no problems should occur."
+                ],
+                "min_needed_temp": [
+                    "Minimum insertion tool temperature",
+                    "When the <i>Hook mode</i> is set to bound to temperature, this is the minimum one in Celsius " +
+                    "degrees at which the filament insertion is performed."
+                ],
                 "command_mode": [
                     "Command mode",
                     "This selector defines if the user prefers to use suggested command or to write a proper G-code " +
@@ -517,9 +540,7 @@ $(function () {
 
     OCTOPRINT_VIEWMODELS.push({
         construct: FilamentBuddyViewModel,
-        // ViewModels your plugin depends on, e.g. loginStateViewModel, settingsViewModel, ...
         dependencies: ["settingsViewModel", "printerStateViewModel", "temperatureViewModel"],
-        // Elements to bind to, e.g. #settings_plugin_filamentbuddy, #tab_plugin_filamentbuddy, ...
         elements: ["#settings_plugin_filamentbuddy", "#navbar_plugin_filamentbuddy"]
     });
 });

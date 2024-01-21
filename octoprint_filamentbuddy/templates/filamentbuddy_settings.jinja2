@@ -475,6 +475,41 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     </div>
 
                     <div class="control-group">
+                        <label class="control-label">Hook mode</label>
+                        <div class="controls">
+                            <label>
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fr.en,
+                                                   value: filamentbuddy.fr.hook_mode">
+                                    <option value="outside">Before and after the print</option>
+                                    <option value="temperature">When the temperature is correct</option>
+                                </select>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fr.hook_mode')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fr.hook_mode() === 'temperature'">
+                        <label class="control-label">Minimum insertion tool temperature</label>
+                        <div class="controls">
+                            <div class="input-append">
+                                <input type="number" min="0" step="1" class="hide-text-when-disabled"
+                                   data-bind="enable: filamentbuddy.fr.en() &&
+                                                      filamentbuddy.fr.hook_mode() === 'temperature',
+                                              value: filamentbuddy.fr.min_needed_temp">
+                                <span class="add-on unit-of-measure">°C</span>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fr.min_needed_temp')">
+                                    &#9432;
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
                         <label class="control-label">Command mode</label>
                         <div class="controls">
                             <label>

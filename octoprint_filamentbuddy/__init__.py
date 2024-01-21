@@ -17,6 +17,7 @@ from __future__ import absolute_import
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 from threading import Event, Lock, Thread
 from gpiozero import DigitalInputDevice
 from flask import jsonify
@@ -41,10 +42,12 @@ class FilamentBuddyPlugin(
 ):
     BOUNCE_TIME = 1  # s
     VERIFYING_TIME = 1  # s
+    REMOVING_TARGET_T = 5  # °C
 
     def __init__(self):
         super().__init__()
         self.__fs_manager = None
+        self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
 
     def on_after_startup(self):
         self.__reset_plugin()
@@ -55,34 +58,35 @@ class FilamentBuddyPlugin(
             self.__fs_manager.close()
 
     def __reset_plugin(self):
-        self.initialize_filament_sensor()
+        self.__initialize_filament_sensor()
+        self.__initialize_filament_remover()
 
-    def initialize_filament_sensor(self):
+    def __initialize_filament_sensor(self):
         if self.__fs_manager is not None:
             self.__fs_manager.close()
         self.__fs_manager = None
-        if not self.get_bool("fs", "en"):
+        if not self.__get_bool("fs", "en"):
             return
 
-        if "polling".__eq__(self.get_string("fs", "sensor_mode")):
+        if "polling".__eq__(self.__get_string("fs", "sensor_mode")):
             self.__fs_manager = FilamentBuddyPlugin.PollingManager(
                 self._logger,
                 self.__runout_action,
-                self.get_int("fs", "sensor_pin"),
-                self.get_int("fs", "polling_time"),
-                self.get_int("fs", "run_out_time"),
-                self.get_string("fs", "empty_voltage")
+                self.__get_int("fs", "sensor_pin"),
+                self.__get_int("fs", "polling_time"),
+                self.__get_int("fs", "run_out_time"),
+                self.__get_string("fs", "empty_voltage")
             )
             self.__enable_if_printing()
             return
 
-        if "interrupt".__eq__(self.get_string("fs", "sensor_mode")):
+        if "interrupt".__eq__(self.__get_string("fs", "sensor_mode")):
             self.__fs_manager = FilamentBuddyPlugin.InterruptManager(
                 self._logger,
                 self.__runout_action,
-                self.get_int("fs", "sensor_pin"),
-                self.get_int("fs", "run_out_time"),
-                self.get_string("fs", "empty_voltage")
+                self.__get_int("fs", "sensor_pin"),
+                self.__get_int("fs", "run_out_time"),
+                self.__get_string("fs", "empty_voltage")
             )
             self.__enable_if_printing()
             return
@@ -90,16 +94,24 @@ class FilamentBuddyPlugin(
         raise Exception("Implementation error: this FS type is unknown")
 
     def __runout_action(self):
-        if self.get_bool("fs", "use_pause"):
+        if self.__get_bool("fs", "use_pause"):
             self._printer.pause_print()
         self._printer.commands(
-            [c.strip() for c in self.get_string("fs", "run_out_command").split("\n")]
+            [c.strip() for c in self.__get_string("fs", "run_out_command").split("\n")]
         )
-        self.send_notification("The filament has run out", True)
+        self.__send_notification("The filament has run out", True)
 
     def __enable_if_printing(self):
         if self._printer.is_printing():
             self.__fs_manager.start_checking()
+
+    def __initialize_filament_remover(self):
+        if (self.__get_bool("fr", "en")
+                and "temperature" == self.__get_string("fr", "hook_mode")
+                and (self._printer.is_printing() or self._printer.is_pausing() or self._printer.is_paused())):
+            self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING
+            return
+        self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
 
     def on_event(self, event, payload):
         if not event.startswith("Print"):
@@ -108,10 +120,13 @@ class FilamentBuddyPlugin(
         if Events.PRINT_STARTED.__eq__(event):
             if self.__fs_manager is not None:
                 self.__fs_manager.start_checking()
-            if not self.__fs_manager.is_currently_available():
-                self.send_notification("Filament not found, starting run out timeout")
-            if self.get_bool("fr", "en"):
-                self.insert_filament()
+                if not self.__fs_manager.is_currently_available():
+                    self.__send_notification("Filament not found, starting run out timeout")
+            if self.__get_bool("fr", "en"):
+                if "outside" == self.__get_string("fr", "hook_mode"):
+                    self.__insert_filament()
+                else:
+                    self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_INSERTING
             return
 
         if Events.PRINT_PAUSED.__eq__(event):
@@ -123,42 +138,71 @@ class FilamentBuddyPlugin(
             if self.__fs_manager is not None:
                 self.__fs_manager.start_checking()
                 if not self.__fs_manager.is_currently_available():
-                    self.send_notification("Filament not found, starting run out timeout")
+                    self.__send_notification("Filament not found, starting run out timeout")
             return
 
         if event in (Events.PRINT_DONE, Events.PRINT_FAILED):
             if self.__fs_manager is not None:
                 self.__fs_manager.stop_checking()
-            if self.get_bool("fr", "en"):
-                self.remove_filament()
+            if self.__get_bool("fr", "en"):
+                if "outside" == self.__get_string("fr", "hook_mode"):
+                    self.__remove_filament()
+                else:
+                    if self.__fr_state == FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING:
+                        self.__remove_filament()
+                    self.__initialize_filament_remover()
             return
 
-    def generate_fr_command(self, length, command):
-        if "simplified".__eq__(self.get_string("fr", "command_mode")):
+    def on_temperature_received(self, comm_instance, parsed_temperatures, *args, **kwargs):
+        if (self.__fr_state == FilamentBuddyPlugin.FRState.INACTIVE or
+                not self._printer.is_printing() or
+                'T0' not in parsed_temperatures or
+                not isinstance(parsed_temperatures['T0'], tuple) or
+                len(parsed_temperatures['T0']) != 2 or
+                parsed_temperatures['T0'][1] is None):
+            return parsed_temperatures
+
+        current_t, target_t = parsed_temperatures['T0']
+        # self._logger.info(f"Tc: {current_t}°C, Tt: {target_t}°C, {self.__fr_state}")
+
+        if self.__fr_state == FilamentBuddyPlugin.FRState.WAIT_FOR_INSERTING:
+            if current_t > self.__get_int("fr", "min_needed_temp"):
+                self.__insert_filament()
+                self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING
+        else:
+            # Necessarily WAIT_FOR_REMOVAL
+            if target_t < FilamentBuddyPlugin.REMOVING_TARGET_T:
+                self.__remove_filament()
+                self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
+
+        return parsed_temperatures
+
+    def __generate_fr_command(self, length, command):
+        if "simplified".__eq__(self.__get_string("fr", "command_mode")):
             c = ["G91", f"G1 E{length}", "G90"]
-            if self.get_bool("fr", "force_cold"):
+            if self.__get_bool("fr", "force_cold"):
                 c.insert(0, "M302 P1")
             return c
         return [c.strip() for c in command.split("\n")]
 
-    def remove_filament(self):
-        length = self.get_int("fr", "retract_length")
+    def __remove_filament(self):
+        length = self.__get_int("fr", "retract_length")
         if length <= 0:
             return
-        commands = self.generate_fr_command(
+        commands = self.__generate_fr_command(
             -length,
-            self.get_string("fr", "retract_command")
+            self.__get_string("fr", "retract_command")
         )
         self._printer.commands(commands)
         self._logger.info(f"Removing filament with: {commands}")
 
-    def insert_filament(self):
-        length = self.get_int("fr", "extrude_length")
+    def __insert_filament(self):
+        length = self.__get_int("fr", "extrude_length")
         if length <= 0:
             return
-        commands = self.generate_fr_command(
+        commands = self.__generate_fr_command(
             length,
-            self.get_string("fr", "extrude_command")
+            self.__get_string("fr", "extrude_command")
         )
         self._printer.commands(commands)
         self._logger.info(f"Inserting filament with: {commands}")
@@ -176,26 +220,26 @@ class FilamentBuddyPlugin(
             })
         return None
 
-    def send_notification(self, message: str, is_severe: bool = False):
+    def __send_notification(self, message: str, is_severe: bool = False):
         self._plugin_manager.send_plugin_message("filamentbuddy", {"message": message, "is_severe": is_severe})
 
-    def get_raw_value(self, source: Literal["fc", "fs", "fr"], param):
+    def __get_raw_value(self, source: Literal["fc", "fs", "fr"], param):
         modified = self._settings.get([source])
         if param in modified:
             return modified[param]
         return FilamentBuddyPlugin.DEFAULT_SETTINGS[source][param]
 
-    def get_int(self, source: Literal["fc", "fs", "fr"], param: str) -> int:
-        return int(self.get_raw_value(source, param))
+    def __get_int(self, source: Literal["fc", "fs", "fr"], param: str) -> int:
+        return int(self.__get_raw_value(source, param))
 
-    def get_float(self, source: Literal["fc", "fs", "fr"], param: str) -> float:
-        return float(self.get_raw_value(source, param))
+    def __get_float(self, source: Literal["fc", "fs", "fr"], param: str) -> float:
+        return float(self.__get_raw_value(source, param))
 
-    def get_bool(self, source: Literal["fc", "fs", "fr"], param: str) -> bool:
-        return bool(self.get_raw_value(source, param))
+    def __get_bool(self, source: Literal["fc", "fs", "fr"], param: str) -> bool:
+        return bool(self.__get_raw_value(source, param))
 
-    def get_string(self, source: Literal["fc", "fs", "fr"], param: str) -> str:
-        return str(self.get_raw_value(source, param))
+    def __get_string(self, source: Literal["fc", "fs", "fr"], param: str) -> str:
+        return str(self.__get_raw_value(source, param))
 
     DEFAULT_SETTINGS = {
         "first_startup": True,
@@ -234,6 +278,8 @@ class FilamentBuddyPlugin(
         # Filament Remover
         "fr": {
             "en": False,
+            "hook_mode": "outside",
+            "min_needed_temp": 190,  # °C
             "command_mode": "simplified",
             "retract_length": 20,  # mm
             "extrude_length": 0,  # mm
@@ -256,6 +302,11 @@ class FilamentBuddyPlugin(
         data["default"] = FilamentBuddyPlugin.DEFAULT_SETTINGS
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
         self.__reset_plugin()
+
+    class FRState(Enum):
+        INACTIVE = 0,
+        WAIT_FOR_INSERTING = 1,
+        WAIT_FOR_REMOVING = 2
 
     class FilamentSensorManager(ABC):
 
@@ -480,5 +531,6 @@ def __plugin_load__():
 
     global __plugin_hooks__
     __plugin_hooks__ = {
-        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
+        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
+        "octoprint.comm.protocol.temperatures.received": __plugin_implementation__.on_temperature_received
     }

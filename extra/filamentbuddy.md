@@ -1,3 +1,108 @@
+---
+layout: plugin
+
+id: filamentbuddy
+title: FilamentBuddy
+description: This plugin implements three features, filament change buttons, filament sensor manager and filament remover when the print is completed.
+
+authors:
+- danieleborgo
+#- second author name
+license: GPLv3
+
+# today's date in format YYYY-MM-DD, e.g.
+date: 2024-01-21
+
+homepage: https://github.com/danieleborgo/OctoPrint-FilamentBuddy
+source: https://github.com/danieleborgo/OctoPrint-FilamentBuddy
+archive: https://github.com/danieleborgo/OctoPrint-FilamentBuddy/archive/master.zip
+
+# Set this to true if your plugin uses the dependency_links setup parameter to include
+# library versions not yet published on pypi. SHOULD ONLY BE USED IF THERE IS NO OTHER OPTION!
+#follow_dependency_links: false
+
+tags:
+- gpio
+- raspberry
+- raspberrypi
+- raspbian
+- linux
+- filamentbuddy
+- filament-changer
+- filament-sensor
+- filament-remover
+- sensor
+
+screenshots:
+- url: /assets/img/plugins/filamentbuddy/fc_simplified.png
+  alt: Filament Changer settings
+  caption: Filament Changer settings
+- url: /assets/img/plugins/filamentbuddy/fs_polling.png
+  alt: Filament Sensor settings
+  caption: Filament Sensor settings
+- url: /assets/img/plugins/filamentbuddy/fr_simplified.png
+  alt: Filament Remover settings
+  caption: Filament Remover settings
+- url: /assets/img/plugins/filamentbuddy/info_window.png
+  alt: FilamentBuddy help
+  caption: FilamentBuddy help
+
+featuredimage: /assets/img/plugins/filamentbuddy/fc_simplified.png
+
+# You only need the following if your plugin requires specific OctoPrint versions or
+# specific operating systems to function - you can safely remove the whole
+# "compatibility" block if this is not the case.
+
+compatibility:
+
+  # List of compatible versions
+  #
+  # A single version number will be interpretated as a minimum version requirement,
+  # e.g. "1.3.1" will show the plugin as compatible to OctoPrint versions 1.3.1 and up.
+  # More sophisticated version requirements can be modelled too by using PEP440
+  # compatible version specifiers.
+  #
+  # You can also remove the whole "octoprint" block. Removing it will default to all
+  # OctoPrint versions being supported.
+
+  octoprint:
+  - 1.7.2
+
+  # List of compatible operating systems
+  #
+  # Possible values:
+  #
+  # - windows
+  # - linux
+  # - macos
+  # - freebsd
+  #
+  # There are also two OS groups defined that get expanded on usage:
+  #
+  # - posix: linux, macos and freebsd
+  # - nix: linux and freebsd
+  #
+  # You can also remove the whole "os" block. Removing it will default to all
+  # operating systems being supported.
+
+  os:
+  - linux
+
+  # Compatible Python version
+  #
+  # Plugins should aim for compatibility for Python 2 and 3 for now, in which case the value should be ">=2.7,<4".
+  #
+  # Plugins that only wish to support Python 3 should set it to ">=3,<4".
+  #
+  # If your plugin only supports Python 2 it will no longer be accepted on the plugin repository.
+  #
+  # Uncomment the appropriate setting
+
+  #python: ">=2.7,<3" # Python 2 & 3
+  python: ">=3,<4" # Python 3 only
+
+---
+
 # FilamentBuddy
 
 This plugin implements three features: filament change buttons, filament
@@ -84,7 +189,7 @@ setting all the parameters.
 
 ## Help
 
-<img width="50%" src="images/info_button.png" alt="" align="right">
+<img width="50%" src="/assets/img/plugins/filamentbuddy/info_button.png" alt="" align="right">
 Almost all the parameters in configuration have on their side a button
 that, if clicked, shows an explanation of what that value is meant to do.
 For some users, these explanation may seem too detailed but they are
@@ -159,23 +264,7 @@ in their settings page.
 
 ## Screenshots
 
-More images available [here](images/).
-
-#### Filament Changer settings
-
-<img width="80%" src="images/fc_simplified.png" alt="">
-
-#### Filament Sensor settings
-
-<img width="80%" src="images/fs_polling.png" alt="">
-
-#### Filament Remover settings
-
-<img width="80%" src="images/fr_simplified.png" alt="">
-
-#### Help window
-
-<img width="70%" src="images/info_window.png" alt="">
+More images available [here](https://github.com/danieleborgo/OctoPrint-FilamentBuddy/blob/master/images/).
 
 
 ## License
