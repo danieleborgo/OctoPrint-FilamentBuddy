@@ -81,6 +81,9 @@ $(function () {
             self.filamentbuddy.fs.run_out_time.subscribe(
                 value => self.filamentbuddy.fs.run_out_time(self.makeInteger(value))
             );
+            self.filamentbuddy.fs.mqtt_port.subscribe(
+                value => self.filamentbuddy.fs.mqtt_port(self.makeInteger(value))
+            );
             self.filamentbuddy.fs.en.subscribe(value => {
                 self.stopUpdatingFilamentSensor();
                 if(value)
@@ -362,6 +365,30 @@ $(function () {
             }
         }
 
+        self.isMQTTPWShown = ko.observable(false);
+        self.updateMQTTPasswordState = () => self.isMQTTPWShown(!self.isMQTTPWShown());
+
+        self.testMQTTMessage = () => {
+            self.askConfirmationBeforeExecuting(
+                "If you have pending modifications, these will be automatically saved.",
+                () => {
+                    $.ajax({
+                        url: API_BASEURL + "plugin/filamentbuddy",
+                        type: "POST",
+                        dataType: "json",
+                        contentType: "application/json; charset=UTF-8",
+                        data: JSON.stringify({
+                            command: "test_mqtt"
+                        })
+                    }).done(function () {
+                        console.log("MQTT command request received by the server");
+                    }).fail(function () {
+                        console.log("The server responded badly to the MQTT test");
+                    });
+                }
+            );
+        }
+
         self.resetFilamentSensor = () => {
             self.requireReset(() => {
                 let def = self.filamentbuddy.default;
@@ -380,8 +407,25 @@ $(function () {
             });
         }
 
+        self.resetFilamentSensorMQTTPart = () => {
+            self.requireReset(() => {
+                let def = self.filamentbuddy.default;
 
-        /***** FILAMENT SENSOR *****/
+                self.filamentbuddy.fs.mqtt_en(def.fs.mqtt_en());
+                self.filamentbuddy.fs.mqtt_address(def.fs.mqtt_address());
+                self.filamentbuddy.fs.mqtt_port(def.fs.mqtt_port());
+                self.filamentbuddy.fs.mqtt_client_id(def.fs.mqtt_client_id());
+                self.filamentbuddy.fs.mqtt_use_login(def.fs.mqtt_use_login());
+                self.filamentbuddy.fs.mqtt_username(def.fs.mqtt_username());
+                self.filamentbuddy.fs.mqtt_password(def.fs.mqtt_password());
+                self.filamentbuddy.fs.mqtt_topic(def.fs.mqtt_topic());
+                self.filamentbuddy.fs.mqtt_message_string(def.fs.mqtt_message_string());
+                self.settingsViewModel.saveData();
+            });
+        }
+
+
+        /***** FILAMENT REMOVER *****/
 
         self.resetFilamentRemover = () => {
             self.requireReset(() => {
@@ -503,6 +547,31 @@ $(function () {
                     "Toolbar update time",
                     "The toolbar indicator is periodically updated with this parameter as interval. It is " +
                     "discouraged to use values lower than the one placed as default."
+                ],
+                "mqtt_en":[
+                    "Enable MQTT run out message",
+                    "This section allows to setup a simple MQTT notification when the filament runs out."
+                ],
+                "mqtt_addr_port":[
+                    "MQTT address and port",
+                    "These two parameters refer to the broker which is supposed to receive the message."
+                ],
+                "mqtt_id":[
+                    "MQTT client ID",
+                    "This string identifies the sender, in this case OctoPrint, in particular this plugin."
+                ],
+                "mqtt_auth":[
+                    "MQTT authentication",
+                    "This plugin supports both the brokers without authentications and the ones who need a pair of " +
+                    "username and password."
+                ],
+                "mqtt_topic":[
+                    "MQTT topic",
+                    "This is the topic in which the plugin has to send the message."
+                ],
+                "mqtt_message_string":[
+                    "MQTT message",
+                    "This is the message the plugin has to send to the broker."
                 ]
             },
             "fr": {

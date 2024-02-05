@@ -452,6 +452,178 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                             </button>
                         </div>
                     </div>
+
+                    <hr>
+
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="enable: filamentbuddy.fs.en,
+                                                  checked: filamentbuddy.fs.mqtt_en">
+                                Enable MQTT notification
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_en')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <label class="control-label">MQTT address</label>
+                        <div class="controls">
+                            <label>
+                                <input type="text" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                                  value: filamentbuddy.fs.mqtt_address">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_addr_port')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <label class="control-label">MQTT port</label>
+                        <div class="controls">
+                            <label>
+                                <input type="number" min="0" step="1" max="65535"
+                                       class="input-large hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                                   value: filamentbuddy.fs.mqtt_port">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_addr_port')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <label class="control-label">MQTT client ID</label>
+                        <div class="controls">
+                            <label>
+                                <input type="text" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                                  value: filamentbuddy.fs.mqtt_client_id">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_id')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                                  checked: filamentbuddy.fs.mqtt_use_login">
+                                Use authentication
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_auth')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en() &&
+                                                                   filamentbuddy.fs.mqtt_use_login()">
+                        <label class="control-label">MQTT username</label>
+                        <div class="controls">
+                            <label>
+                                <input type="text" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() &&
+                                                          filamentbuddy.fs.mqtt_en() &&
+                                                          filamentbuddy.fs.mqtt_use_login(),
+                                                  value: filamentbuddy.fs.mqtt_username">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_auth')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en() &&
+                                                                   filamentbuddy.fs.mqtt_use_login()">
+                        <label class="control-label">MQTT password</label>
+                        <div class="controls">
+                            <label>
+                                <input class="hide-text-when-disabled"
+                                       id="filamentbuddy_fs_mqtt_pw"
+                                       data-bind="enable: filamentbuddy.fs.en() &&
+                                                          filamentbuddy.fs.mqtt_en() &&
+                                                          filamentbuddy.fs.mqtt_use_login(),
+                                                  value: filamentbuddy.fs.mqtt_password,
+                                                  attr: {type: isMQTTPWShown() ? 'text' : 'password'}">
+                                <button class="btn btn-small"
+                                        data-bind="enable: filamentbuddy.fs.en() &&
+                                                           filamentbuddy.fs.mqtt_en() &&
+                                                           filamentbuddy.fs.mqtt_use_login(),
+                                                   click: updateMQTTPasswordState">Show</button>
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_auth')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <label class="control-label">MQTT topic</label>
+                        <div class="controls">
+                            <label>
+                                <input type="text" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                                  value: filamentbuddy.fs.mqtt_topic">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_topic')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <label class="control-label">MQTT string to send</label>
+                        <div class="controls">
+                            <label>
+                                <input type="text" class="hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.fs.en() &&
+                                                          filamentbuddy.fs.mqtt_en(),
+                                                  value: filamentbuddy.fs.mqtt_message_string">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.mqtt_message_string')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <div class="controls">
+                            <button class="btn btn-primary"
+                                    data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                               click: testMQTTMessage">
+                                Test MQTT message
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: filamentbuddy.fs.mqtt_en">
+                        <div class="controls">
+                            <button class="btn btn-primary"
+                                    data-bind="enable: filamentbuddy.fs.en() && filamentbuddy.fs.mqtt_en(),
+                                               click: resetFilamentSensorMQTTPart">
+                                Reset to default
+                            </button>
+                        </div>
+                    </div>
                 </form>
             </div>
 

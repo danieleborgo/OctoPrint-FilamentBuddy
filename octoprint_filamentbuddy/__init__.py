@@ -15,15 +15,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import absolute_import
 
-from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
-from threading import Event, Lock, Thread
-from gpiozero import DigitalInputDevice
 from flask import jsonify
+from paho.mqtt import client as mqtt
 
 import octoprint.plugin
 from octoprint.events import Events
+from octoprint_filamentbuddy import GenericFilamentSensorManager
+from octoprint_filamentbuddy.manager.PollingFilamentSensorManager import PollingFilamentSensorManager
+from octoprint_filamentbuddy.manager.InterruptFilamentSensorManager import InterruptFilamentSensorManager
 
 try:
     from typing import Literal
@@ -40,9 +40,8 @@ class FilamentBuddyPlugin(
     octoprint.plugin.ShutdownPlugin,
     octoprint.plugin.SimpleApiPlugin
 ):
-    BOUNCE_TIME = 1  # s
-    VERIFYING_TIME = 1  # s
-    REMOVING_TARGET_T = 5  # °C
+
+    REMOVING_TARGET_MIN_T = 5  # °C
 
     def __init__(self):
         super().__init__()
@@ -69,7 +68,7 @@ class FilamentBuddyPlugin(
             return
 
         if "polling".__eq__(self.__get_string("fs", "sensor_mode")):
-            self.__fs_manager = FilamentBuddyPlugin.PollingManager(
+            self.__fs_manager = PollingFilamentSensorManager(
                 self._logger,
                 self.__runout_action,
                 self.__get_int("fs", "sensor_pin"),
@@ -81,7 +80,7 @@ class FilamentBuddyPlugin(
             return
 
         if "interrupt".__eq__(self.__get_string("fs", "sensor_mode")):
-            self.__fs_manager = FilamentBuddyPlugin.InterruptManager(
+            self.__fs_manager = InterruptFilamentSensorManager(
                 self._logger,
                 self.__runout_action,
                 self.__get_int("fs", "sensor_pin"),
@@ -100,6 +99,41 @@ class FilamentBuddyPlugin(
             [c.strip() for c in self.__get_string("fs", "run_out_command").split("\n")]
         )
         self.__send_notification("The filament has run out", True)
+        self.__send_mqtt_if_en()
+
+    def __send_mqtt_if_en(self):
+        if not self.__get_bool("fs", "mqtt_en"):
+            return
+
+        client_id = self.__get_string("fs", "mqtt_client_id")
+        address = self.__get_string("fs", "mqtt_address")
+        port = self.__get_int("fs", "mqtt_port")
+        topic = self.__get_string("fs", "mqtt_topic")
+        message = self.__get_string("fs", "mqtt_message_string").encode('utf-8')
+
+        self._logger.info(f"Preparing to send MQTT message from {client_id} to {address}:{port}/{topic}")
+
+        client = mqtt.Client(client_id)
+        client.on_publish = lambda cl, userdata, mid: self._logger.info("MQTT message sent: " + str(message))
+
+        if self.__get_bool("fs", "mqtt_use_login"):
+            username = self.__get_string("fs", "mqtt_username")
+            password = self.__get_string("fs", "mqtt_password")
+            client.username_pw_set(username, password)
+
+        try:
+            client.connect(address, port)
+            client.loop_start()
+            info = client.publish(
+                topic=topic,
+                payload=message,
+                qos=0,
+            )
+            info.wait_for_publish()
+            client.disconnect()
+        except ConnectionRefusedError:
+            self._logger.info("Impossible to connect to MQTT broker")
+            self.__send_notification("Impossible to connect to MQTT broker")
 
     def __enable_if_printing(self):
         if self._printer.is_printing():
@@ -171,7 +205,7 @@ class FilamentBuddyPlugin(
                 self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING
         else:
             # Necessarily WAIT_FOR_REMOVAL
-            if target_t < FilamentBuddyPlugin.REMOVING_TARGET_T:
+            if target_t < FilamentBuddyPlugin.REMOVING_TARGET_MIN_T:
                 self.__remove_filament()
                 self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
 
@@ -209,7 +243,8 @@ class FilamentBuddyPlugin(
 
     def get_api_commands(self):
         return dict(
-            filament_status=[]
+            filament_status=[],
+            test_mqtt=[]
         )
 
     def on_api_command(self, command, data):
@@ -218,6 +253,12 @@ class FilamentBuddyPlugin(
                 'state': self.__fs_manager is not None,
                 'filament': None if self.__fs_manager is None else self.__fs_manager.is_currently_available()
             })
+
+        if command == "test_mqtt":
+            self.__send_mqtt_if_en()
+            return jsonify({})
+
+        self._logger.info("API request unknown: " + command)
         return None
 
     def __send_notification(self, message: str, is_severe: bool = False):
@@ -272,7 +313,16 @@ class FilamentBuddyPlugin(
             "run_out_command": "",
             "empty_voltage": "low",
             "toolbar_time": 4,  # s
-            "toolbar_en": True
+            "toolbar_en": True,
+            "mqtt_en": False,
+            "mqtt_address": "",
+            "mqtt_port": 1883,
+            "mqtt_client_id": "OctoprintFilamentBuddy",
+            "mqtt_use_login": False,
+            "mqtt_username": "",
+            "mqtt_password": "",
+            "mqtt_topic": "FilamentBuddy",
+            "mqtt_message_string": "Filament is over"
         },
 
         # Filament Remover
@@ -307,192 +357,6 @@ class FilamentBuddyPlugin(
         INACTIVE = 0,
         WAIT_FOR_INSERTING = 1,
         WAIT_FOR_REMOVING = 2
-
-    class FilamentSensorManager(ABC):
-
-        def __init__(self, logger, runout_f):
-            self.__pool = ThreadPoolExecutor(max_workers=1)
-            self.__logger = logger
-            self.__runout_f = runout_f
-
-        @abstractmethod
-        def start_checking(self):
-            pass
-
-        @abstractmethod
-        def stop_checking(self):
-            pass
-
-        @abstractmethod
-        def is_currently_available(self):
-            pass
-
-        @abstractmethod
-        def close(self):
-            pass
-
-        def _submit(self, to_run):
-            self.__pool.submit(to_run)
-
-        def _close_pool(self):
-            self.__pool.shutdown(wait=False)
-
-        def _log(self, message: str):
-            self.__logger.info(message)
-
-        def _runout(self):
-            self.__runout_f()
-
-    class PollingManager(FilamentSensorManager):
-        def __init__(self, logger, runout_f, pin: int, polling_time: int, runout_time: int, empty_v: str):
-            super().__init__(logger, runout_f)
-            self.__polling_time = polling_time
-            self.__runout_time = runout_time
-            self.__is_empty_high = "high".__eq__(empty_v.lower())
-
-            self.__input_device = DigitalInputDevice(
-                pin=pin,
-                pull_up=self.__is_empty_high,
-                bounce_time=FilamentBuddyPlugin.BOUNCE_TIME
-            )
-            self.__event = None
-            self.__running = False
-            self.__verifying = False
-
-        def start_checking(self):
-            if self.__running:
-                return
-            self.__running = True
-            self.__event = Event()
-            self._log("Filament Sensor via polling started")
-            self._submit(self.__perform_polling)
-
-        def stop_checking(self):
-            if not self.__running:
-                return
-            self.__running = False
-            self.__verifying = False
-            self.__event.set()
-            self._log("Filament Sensor via polling stopped")
-
-        def __perform_polling(self):
-            while self.__running:
-                self.__event.wait(self.__polling_time)
-                if not self.__running:
-                    break
-
-                # if the filament becomes unavailable
-                if not self.is_currently_available():
-                    self.__verifying = True
-                    count = 0
-                    self.__event.wait(FilamentBuddyPlugin.VERIFYING_TIME)
-                    self._log("First missing filament")
-                    while self.__verifying:
-                        if self.is_currently_available():
-                            # the filament came back before the deadline
-                            self.__verifying = False
-                            self._log("Filament has returned")
-                            continue
-                        if count * FilamentBuddyPlugin.VERIFYING_TIME >= self.__runout_time:
-                            self._log("Run out time passed, printer paused")
-                            self._runout()
-                            self.stop_checking()
-                            return
-                        count += 1
-                        self.__event.wait(FilamentBuddyPlugin.VERIFYING_TIME)
-
-        def is_currently_available(self):
-            return self.__input_device.value
-
-        def close(self):
-            if self.__running:
-                self.stop_checking()
-            self.__input_device.close()
-            self._close_pool()
-            self._log("Closed polling")
-
-    class InterruptManager(FilamentSensorManager):
-        def __init__(self, logger, runout_f, pin: int, runout_time: int, empty_v: str):
-            super().__init__(logger, runout_f)
-            self.__pin = pin
-            self.__runout_time = runout_time
-            self.__is_empty_high = "high".__eq__(empty_v.lower())
-
-            self.__input_device = DigitalInputDevice(
-                pin=pin,
-                pull_up=self.__is_empty_high
-            )
-            self.__running = False
-            self.__lock = Lock()
-            self.__runout_thread = None
-            self.__runout_event = None
-
-            self.__filament_available = self.__input_device.value
-            self.__input_device.when_activated = lambda: self._submit(self.__input_went_up)
-            self.__input_device.when_deactivated = lambda: self._submit(self.__input_went_down)
-
-        def start_checking(self):
-            if self.__running:
-                return
-            self.__running = True
-            self.__filament_available = self.__input_device.value
-            if not self.__filament_available:
-                self.__check_if_runout()
-            self._log("Filament Sensor via interrupt started")
-
-        def stop_checking(self):
-            if not self.__running:
-                return
-            self.__stop_runout_checking()
-            self.__running = False
-            self._log("Filament Sensor via interrupt stopped")
-
-        def __input_went_up(self):
-            if self.__filament_available is True:
-                return
-            with self.__lock:
-                self.__filament_available = True
-                self.__stop_runout_checking()
-            self._log("Filament became available")
-
-        def __input_went_down(self):
-            if self.__filament_available is False:
-                return
-            with self.__lock:
-                self.__filament_available = False
-                self.__check_if_runout()
-            self._log("Filament became unavailable")
-
-        def __check_if_runout(self):
-            if not self.__running:
-                return
-            self.__runout_thread = Thread(target=self.__runout_checker)
-            self.__runout_event = Event()
-            self.__runout_thread.start()
-
-        def __runout_checker(self):
-            self.__runout_event.wait(self.__runout_time)
-            if not self.__runout_event.is_set():
-                self._runout()
-                self._log("Run out time passed, printer paused")
-                return
-            self._log("Filament has returned")
-
-        def __stop_runout_checking(self):
-            if self.__runout_event is not None:
-                self.__runout_event.set()
-                self.__runout_event = None
-                self.__runout_thread.join()
-                self.__runout_thread = None
-
-        def is_currently_available(self):
-            return self.__filament_available
-
-        def close(self):
-            self.stop_checking()
-            self.__input_device.close()
-            self._close_pool()
-            self._log("Closed interrupt")
 
     def get_assets(self):
         return {

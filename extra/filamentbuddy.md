@@ -128,7 +128,7 @@ it pauses the printer, avoiding it to fail and waiting for filament
 replacement, which can be done by hand, by another plugin or, better,
 via the feature _Filament Changer_.
 This plugin also has a toolbar indicator to signal if the filament is 
-inserted or not.
+inserted or not and a run out MQTT notification.
 
 The currently supported sensors are the ones that uses a binary digital
 value, one for the filament inserted and the other where it is not.
@@ -198,9 +198,9 @@ thought to be complete.
 ## Note for developers
 
 Since it is impossible to cover all the available filament sensors on
-the marked, this plugin is easily extensible to support other models
+the market, this plugin is easily extensible to support other models
 in the future. More in details, it has an abstract class named 
-_FilamentSensorManager_, which can extended to support new sensor,
+_GenericFilamentSensorManager_, which can extended to support new sensor,
 implementing its abstract methods, which are, hopefully, generic enough.
 The plugin instantiates these in the _initialize_filament_sensor_ method
 and it treats them as the abstract class, so it can support multiple
