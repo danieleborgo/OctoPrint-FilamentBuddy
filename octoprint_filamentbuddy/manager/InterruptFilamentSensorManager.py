@@ -20,6 +20,7 @@ try:
 except ModuleNotFoundError:
     from octoprint_filamentbuddy.manager import DigitalInputDeviceForOlderPy as DigitalInputDevice
 
+from octoprint_filamentbuddy.manager import GPIONotFoundException
 from octoprint_filamentbuddy.GenericFilamentSensorManager import GenericFilamentSensorManager
 
 
@@ -31,10 +32,14 @@ class InterruptFilamentSensorManager(GenericFilamentSensorManager):
         self.__runout_time = runout_time
         self.__is_empty_high = "high".__eq__(empty_v.lower())
 
-        self.__input_device = DigitalInputDevice(
-            pin=pin,
-            pull_up=self.__is_empty_high
-        )
+        try:
+            self.__input_device = DigitalInputDevice(
+                pin=pin,
+                pull_up=self.__is_empty_high
+            )
+        except ImportError:
+            raise GPIONotFoundException()
+
         self.__running = False
         self.__lock = Lock()
         self.__runout_thread = None

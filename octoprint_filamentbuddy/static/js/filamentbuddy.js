@@ -344,7 +344,7 @@ $(function () {
             }).done(function (data) {
                 if(data['state'])
                     self.is_filament_available(data['filament']);
-                self.is_filament_error(false);
+                self.is_filament_error(!data['state']);
             }).fail(function () {
                 if(!self.is_filament_error())
                     self.notify("Error in retrieving filament status");

@@ -35,7 +35,7 @@ plugin_license = "GPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
 plugin_requires = [
-    "OctoPrint>=1.7.2", "RPi.GPIO>=0.7.1", "gpiozero>=1.6.2", "flask>=1.1.4", "paho-mqtt>=1.6.1",
+    "OctoPrint>=1.7.2", "RPi.GPIO>=0.7.1", "gpiozero>=1.6.2", "flask>=2.2.3", "paho-mqtt>=1.6.1",
 ]
 
 # --------------------------------------------------------------------------------------------------------------------

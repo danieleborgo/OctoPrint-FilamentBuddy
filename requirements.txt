@@ -3,5 +3,5 @@ setuptools~=65.5.1
 OctoPrint~=1.7.2
 gpiozero~=1.6.2
 RPi.GPIO~=0.7.1
-flask~=1.1.4
+flask~=2.2.3
 paho-mqtt~=1.6.1

@@ -22,6 +22,7 @@ from paho.mqtt import client as mqtt
 import octoprint.plugin
 from octoprint.events import Events
 from octoprint_filamentbuddy import GenericFilamentSensorManager
+from octoprint_filamentbuddy.manager import is_gpio_available
 from octoprint_filamentbuddy.manager.PollingFilamentSensorManager import PollingFilamentSensorManager
 from octoprint_filamentbuddy.manager.InterruptFilamentSensorManager import InterruptFilamentSensorManager
 
@@ -45,6 +46,7 @@ class FilamentBuddyPlugin(
 
     def __init__(self):
         super().__init__()
+        self.__is_gpio_available = is_gpio_available()
         self.__fs_manager = None
         self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
 
@@ -64,7 +66,7 @@ class FilamentBuddyPlugin(
         if self.__fs_manager is not None:
             self.__fs_manager.close()
         self.__fs_manager = None
-        if not self.__get_bool("fs", "en"):
+        if not self.__is_gpio_available or not self.__get_bool("fs", "en"):
             return
 
         if "polling".__eq__(self.__get_string("fs", "sensor_mode")):
@@ -344,11 +346,13 @@ class FilamentBuddyPlugin(
         return {
             **FilamentBuddyPlugin.DEFAULT_SETTINGS,
             **{
+                "is_gpio_available": self.__is_gpio_available,
                 "default": FilamentBuddyPlugin.DEFAULT_SETTINGS
             }
         }
 
     def on_settings_save(self, data):
+        data["is_gpio_available"] = self.__is_gpio_available
         data["default"] = FilamentBuddyPlugin.DEFAULT_SETTINGS
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
         self.__reset_plugin()

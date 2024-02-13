@@ -13,7 +13,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 -->
 
-<div class="navbar-text" data-bind="visible: filamentbuddy.fs.en() && filamentbuddy.fs.toolbar_en()">
+<div class="navbar-text" data-bind="visible: filamentbuddy.is_gpio_available() &&
+                                             filamentbuddy.fs.en() &&
+                                             filamentbuddy.fs.toolbar_en()">
     <img src="/plugin/filamentbuddy/static/img/f_available.png" alt="error"
          class="filament-sensor-navbar-icon"
          data-bind="attr:{src: is_filament_error() ? '/plugin/filamentbuddy/static/img/f_error.png' :

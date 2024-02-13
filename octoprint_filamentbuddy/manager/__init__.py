@@ -14,7 +14,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from typing import Callable
-from RPi import GPIO
+
+try:
+    from RPi import GPIO
+    is_imported = True
+except RuntimeError:
+    is_imported = False
+
+
+class GPIONotFoundException(ImportError):
+    def __init__(self):
+        super().__init__("Impossible to import the GPIO manager module")
+
+
+def is_gpio_available() -> bool:
+    try:
+        from gpiozero import pi_info
+        pi_info()
+        # gpiozero is perfectly working on this Raspberry
+        return True
+    except ModuleNotFoundError:
+        # gpiozero is not supported, so the decision is delegated to RPi.GPIO
+        return is_imported
+    except ImportError:
+        # gpiozero is working but no GPIO scheme has been found
+        return False
+
 
 """
 Some OctoPrint users still use out of life Python versions and some of these 
@@ -28,7 +53,7 @@ The other option is the gpiozero downgrade, which can be performed via pip:
 Nevertheless, this solution has a major issue, which is related to the fact 
 that other plugins may require a newer gpiozero version. Consequently, if the 
 module version is downgraded, it may cause unwanted behavior or errors in these 
-plugin that, obviously, doesn't consider this case. Hence, this downgrade, 
+plugins that, obviously, doesn't consider this case. Hence, this downgrade, 
 despite being here explained, is highly discouraged, even if it works in most 
 cases. The first option, so upgrading Python, remains the most suggested one. 
 
@@ -81,6 +106,9 @@ class DigitalInputDeviceForOlderPy:
         self.__when_deactivated = value
 
     def __init__(self, pin: int, pull_up: bool, bounce_time=1):
+        if not is_imported:
+            raise GPIONotFoundException()
+
         self.__pin = pin
         self.__pull_up = pull_up
         self.__when_activated = None
