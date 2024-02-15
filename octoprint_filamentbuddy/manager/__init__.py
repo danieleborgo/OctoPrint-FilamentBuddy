@@ -18,7 +18,7 @@ from typing import Callable
 try:
     from RPi import GPIO
     is_imported = True
-except RuntimeError:
+except (RuntimeError, ModuleNotFoundError):
     is_imported = False
 
 

@@ -292,9 +292,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
                     <div class="control-group gpio-unavailable-notification"
                          data-bind="visible: !filamentbuddy.is_gpio_available()">
-                        Filament Sensor has been disabled since the GPIO has not been found.
-                        This message should appear if FilamentBuddy is not running on a Raspberry Pi.<br>
-                        It is still possible to use Filament Changer and Filament Remover.
+                        Filament Sensor has been disabled since the GPIO has not been found. This message should appear
+                        only when FilamentBuddy is not running on a Raspberry Pi.<br>
+                        It is still possible to use Filament Changer and Filament Remover.<br><br>
+                        In case this plugin is running on a Raspberry and this message is shown, it is suggested to
+                        uninstall it, reboot OctoPrint and then install it again. If the problem persists, open an issue
+                        <a href="https://github.com/danieleborgo/OctoPrint-FilamentBuddy" target="_blank">here</a>.
                     </div>
 
                     <div class="control-group">

@@ -87,6 +87,7 @@ compatibility:
 
   os:
   - linux
+  - windows
 
   # Compatible Python version
   #
@@ -176,7 +177,7 @@ The _Filament Sensor_ module is different since it uses a Python module
 specifically developed for the Raspberry boards, _gpiozero_, so it has
 this board as prerequisite. Nevertheless, Marlin is not a requirement,
 since it only uses OctoPrint functionalities. In the case FilamentBuddy
-is not running on a Raspberry Pi, the plugin will disable this features.
+is not running on a Raspberry Pi, the plugin will disable this feature.
 
 ## Setup
 
