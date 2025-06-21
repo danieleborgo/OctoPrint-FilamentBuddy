@@ -25,7 +25,7 @@ from octoprint_filamentbuddy.GenericFilamentSensorManager import GenericFilament
 
 
 class PollingFilamentSensorManager(GenericFilamentSensorManager):
-    BOUNCE_TIME = 1  # ms
+    BOUNCE_TIME = 0.02  # s
     VERIFYING_TIME = 1  # s
 
     def __init__(self, logger, runout_f, pin: int, polling_time: int, runout_time: int, empty_v: str):
