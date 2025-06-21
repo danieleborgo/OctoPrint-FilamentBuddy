@@ -25,6 +25,8 @@ from octoprint_filamentbuddy.GenericFilamentSensorManager import GenericFilament
 
 
 class InterruptFilamentSensorManager(GenericFilamentSensorManager):
+    BOUNCE_TIME = 0.02  # s
+
     def __init__(self, logger, runout_f, pin: int, runout_time: int, empty_v: str):
         super().__init__(logger, runout_f)
 
@@ -35,7 +37,8 @@ class InterruptFilamentSensorManager(GenericFilamentSensorManager):
         try:
             self.__input_device = DigitalInputDevice(
                 pin=pin,
-                pull_up=self.__is_empty_high
+                pull_up=self.__is_empty_high,
+                bounce_time=InterruptFilamentSensorManager.BOUNCE_TIME
             )
         except ImportError:
             raise GPIONotFoundException()
