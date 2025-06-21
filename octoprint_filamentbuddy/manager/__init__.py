@@ -105,7 +105,7 @@ class DigitalInputDeviceForOlderPy:
     def when_deactivated(self, value: Callable):
         self.__when_deactivated = value
 
-    def __init__(self, pin: int, pull_up: bool, bounce_time=1):
+    def __init__(self, pin: int, pull_up: bool, bounce_time=10):
         if not is_imported:
             raise GPIONotFoundException()
 
