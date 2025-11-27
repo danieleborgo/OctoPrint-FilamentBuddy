@@ -67,9 +67,10 @@ also work on different boards and printers. Despite this, these two
 would require to manually specify the G-code commands to perform these 
 operations.
 
-The _Filament Sensor_ module is different since it uses a Python module
-specifically developed for the Raspberry boards, _gpiozero_, so it has
-this board as prerequisite. Nevertheless, Marlin is not a requirement,
+The _Filament Sensor_ module is different since it requires to have a GPIO.
+This is applicable not only to Raspberries but also to other similar boards.
+Their compatibility is derived from the two used modules, _periphery_ and
+_Adafruit Blinka_. Nevertheless, Marlin is not a requirement,
 since it only uses OctoPrint functionalities. In the case FilamentBuddy
 is not running on a Raspberry Pi, the plugin will disable this feature.
 
@@ -98,7 +99,7 @@ the market, this plugin is easily extensible to support other models
 in the future. More in details, it has an abstract class named 
 _GenericFilamentSensorManager_, which can extended to support new sensor,
 implementing its abstract methods, which are, hopefully, generic enough.
-The plugin instantiates these in the _initialize_filament_sensor_ method
+The plugin instantiates these in the _initialize_filament_sensor_ method,
 and it treats them as the abstract class, so it can support multiple
 different filament sensors without changing other code parts.
 
