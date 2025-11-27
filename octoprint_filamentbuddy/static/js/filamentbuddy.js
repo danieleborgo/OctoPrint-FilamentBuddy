@@ -1,6 +1,6 @@
 /*
  * FilamentBuddy OctoPrint plugin
- * Copyright (C) 2024 Daniele Borgo
+ * Copyright (C) 2025 Daniele Borgo
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -355,7 +355,8 @@ $(function () {
                         self.updateFilamentStatus,
                         self.filamentbuddy.fs.toolbar_time() * 1000
                     );
-            });
+                }
+            );
         }
 
         self.stopUpdatingFilamentSensor = () => {
@@ -401,6 +402,7 @@ $(function () {
                 self.filamentbuddy.fs.use_pause(def.fs.use_pause());
                 self.filamentbuddy.fs.run_out_command(def.fs.run_out_command());
                 self.filamentbuddy.fs.empty_voltage(def.fs.empty_voltage());
+                self.filamentbuddy.fs.invert_pull(def.fs.invert_pull());
                 self.filamentbuddy.fs.toolbar_time(def.fs.toolbar_time());
                 self.filamentbuddy.fs.toolbar_en(def.fs.toolbar_en());
                 self.settingsViewModel.saveData();
@@ -510,9 +512,12 @@ $(function () {
                 "sensor_mode": [
                     "Sensor mode",
                     "Currently, there are two implemented methods to handle the filament sensor:<ul>" +
-                    "<li><b>Polling</b>: this way periodically checks the filament availability;</li>" +
-                    "<li><b>Interrupt</b>: this way checks only for changes in filament sensor pin, so it is " +
-                    "executed only when the pin state changes.</li></ul>" +
+                    //"<li><b>Polling</b>: this way periodically checks the filament availability;</li>" +
+                    //"<li><b>Interrupt</b>: this way checks only for changes in filament sensor pin, so it is " +
+                    //"executed only when the pin state changes.</li>
+                    "<li>Periphery polling: periodically checks the filament through Periphery Python module.</li>" +
+                    "<li>Adafruit Blinka polling: same as the previous but through a different module.</li>" +
+                    "</ul>" +
                     "Both these methods suppose to have the pin permanently in a state when the filament is " +
                     "available and permanently in the other when it is not.<br>" +
                     "The plugin doesn't stop immediately the print when the filament becomes unavailable but wait " +
@@ -541,7 +546,12 @@ $(function () {
                     "The digital pin has two states, low and high. Some sensor uses high to communicate the filament " +
                     "availability while others uses low. This parameter defines the pin level when the filament <b>" +
                     "is not</b> inserted. By default, the plugin will pull the pin to this value, as indicated by " +
-                    "the note below the selector."
+                    "the note below the selector, unless the invert pull flag is checked."
+                ],
+                "invert_pull": [
+                    "Invert Pull",
+                    "This will invert the default pull defined by the empty voltage. Check the subsequent label to" +
+                    "know which pull value will be applied."
                 ],
                 "toolbar_time": [
                     "Toolbar update time",

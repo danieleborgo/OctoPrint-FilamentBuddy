@@ -1,6 +1,6 @@
 <!--
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2024 Daniele Borgo
+Copyright (C) 2025 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -340,8 +340,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                 <select class="hide-text-when-disabled"
                                         data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
                                                    value: filamentbuddy.fs.sensor_mode">
-                                    <option value="polling">Polling</option>
-                                    <option value="interrupt">Interrupt</option>
+                                    <option value="p_polling">Periphery Polling</option>
+                                    <option value="b_polling">Adafruit Blinka Polling</option>
                                 </select>
                                 <button class="info-button-for-explanation"
                                         data-bind="click: showInfo.bind($data, 'fs.sensor_mode')">
@@ -351,13 +351,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         </div>
                     </div>
 
-                    <div class="control-group" data-bind="visible: filamentbuddy.fs.sensor_mode() === 'polling'">
+                    <div class="control-group" data-bind="visible: ['p_polling', 'b_polling'].includes(filamentbuddy.fs.sensor_mode())">
                         <label class="control-label">Polling time</label>
                         <div class="controls">
                             <div class="input-append">
                                 <input type="number" min="1" step="1" class="hide-text-when-disabled"
                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en() &&
-                                                          filamentbuddy.fs.sensor_mode() === 'polling',
+                                                          filamentbuddy.fs.sensor_mode() === 'p_polling',
                                                   value: filamentbuddy.fs.polling_time">
                                 <span class="add-on unit-of-measure">s</span>
                                 <button class="info-button-for-explanation"
@@ -420,9 +420,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                         data-bind="click: showInfo.bind($data, 'fs.empty_voltage')">
                                     &#9432;
                                 </button>
+                                <label class="checkbox">
+                                    <input type="checkbox" data-bind="enable: filamentbuddy.is_gpio_available() &&
+                                                                              filamentbuddy.fs.en(),
+                                                                      checked: filamentbuddy.fs.invert_pull">
+                                    Invert pull resistor
+                                    <button class="info-button-for-explanation"
+                                            data-bind="click: showInfo.bind($data, 'fs.invert_pull')">
+                                        &#9432;
+                                    </button>
+                                </label>
                             </label>
                             <label>
-                                Raspberry will <b>pull-<span data-bind="text: filamentbuddy.fs.empty_voltage() === 'high' ?
+                                Raspberry will <b>pull-<span data-bind="text: filamentbuddy.fs.empty_voltage() === 'high'
+                                                                                ^ filamentbuddy.fs.invert_pull() ?
                                                                               'up' : 'down'"></span></b> the pin.
                             </label>
                         </div>

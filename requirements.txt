@@ -1,7 +1,6 @@
-
 setuptools~=65.5.1
-OctoPrint~=1.7.2
-gpiozero~=1.6.2
-RPi.GPIO~=0.7.1
+OctoPrint~=1.8.0
 flask~=2.2.3
 paho-mqtt~=1.6.1
+python-periphery~=2.4.1
+adafruit_blinka~=8.66.2

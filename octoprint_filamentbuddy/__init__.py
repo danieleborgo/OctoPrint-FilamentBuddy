@@ -1,6 +1,6 @@
 """
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2024 Daniele Borgo
+Copyright (C) 2025 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -14,6 +14,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from __future__ import absolute_import
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 from enum import Enum
 from flask import jsonify
@@ -21,15 +25,8 @@ from paho.mqtt import client as mqtt
 
 import octoprint.plugin
 from octoprint.events import Events
-from octoprint_filamentbuddy import GenericFilamentSensorManager
-from octoprint_filamentbuddy.manager import is_gpio_available
-from octoprint_filamentbuddy.manager.PollingFilamentSensorManager import PollingFilamentSensorManager
-from octoprint_filamentbuddy.manager.InterruptFilamentSensorManager import InterruptFilamentSensorManager
 
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from .manager import *
 
 
 class FilamentBuddyPlugin(
@@ -69,30 +66,39 @@ class FilamentBuddyPlugin(
         if not self.__is_gpio_available or not self.__get_bool("fs", "en"):
             return
 
-        if "polling".__eq__(self.__get_string("fs", "sensor_mode")):
-            self.__fs_manager = PollingFilamentSensorManager(
+        mode = self.__get_string("fs", "sensor_mode")
+
+        if mode == "p_polling":
+            self.__fs_manager = PeripheryPollingFilamentSensor(
                 self._logger,
                 self.__runout_action,
                 self.__get_int("fs", "sensor_pin"),
                 self.__get_int("fs", "polling_time"),
                 self.__get_int("fs", "run_out_time"),
-                self.__get_string("fs", "empty_voltage")
+                self.__get_string("fs", "empty_voltage"),
+                self.__get_bool("fs", "invert_pull")
             )
             self.__enable_if_printing()
             return
 
-        if "interrupt".__eq__(self.__get_string("fs", "sensor_mode")):
-            self.__fs_manager = InterruptFilamentSensorManager(
+        if mode == "b_polling":
+            self.__fs_manager = BlinkaPollingFilamentSensor(
                 self._logger,
                 self.__runout_action,
                 self.__get_int("fs", "sensor_pin"),
+                self.__get_int("fs", "polling_time"),
                 self.__get_int("fs", "run_out_time"),
-                self.__get_string("fs", "empty_voltage")
+                self.__get_string("fs", "empty_voltage"),
+                self.__get_bool("fs", "invert_pull")
             )
             self.__enable_if_printing()
             return
 
-        raise Exception("Implementation error: this FS type is unknown")
+        if mode in ["interrupt", "polling"]:
+            self._logger.info("Interrupt and polling modes have been deprecated")
+            return
+
+        raise Exception(f"Implementation error: unknown FS type: {mode}")
 
     def __runout_action(self):
         if self.__get_bool("fs", "use_pause"):
@@ -153,7 +159,7 @@ class FilamentBuddyPlugin(
         if not event.startswith("Print"):
             return
 
-        if Events.PRINT_STARTED.__eq__(event):
+        if Events.PRINT_STARTED == event:
             if self.__fs_manager is not None:
                 self.__fs_manager.start_checking()
                 if not self.__fs_manager.is_currently_available():
@@ -165,12 +171,12 @@ class FilamentBuddyPlugin(
                     self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_INSERTING
             return
 
-        if Events.PRINT_PAUSED.__eq__(event):
+        if Events.PRINT_PAUSED == event:
             if self.__fs_manager is not None:
                 self.__fs_manager.stop_checking()
             return
 
-        if Events.PRINT_RESUMED.__eq__(event):
+        if Events.PRINT_RESUMED == event:
             if self.__fs_manager is not None:
                 self.__fs_manager.start_checking()
                 if not self.__fs_manager.is_currently_available():
@@ -214,7 +220,7 @@ class FilamentBuddyPlugin(
         return parsed_temperatures
 
     def __generate_fr_command(self, length, command):
-        if "simplified".__eq__(self.__get_string("fr", "command_mode")):
+        if self.__get_string("fr", "command_mode") == "simplified":
             c = ["G91", f"G1 E{length}", "G90"]
             if self.__get_bool("fr", "force_cold"):
                 c.insert(0, "M302 P1")
@@ -308,12 +314,13 @@ class FilamentBuddyPlugin(
         "fs": {
             "en": False,
             "sensor_pin": 8,
-            "sensor_mode": "polling",
+            "sensor_mode": "p_polling",
             "polling_time": 10,  # s
             "run_out_time": 60,  # s
             "use_pause": True,
             "run_out_command": "",
             "empty_voltage": "low",
+            "invert_pull": False,
             "toolbar_time": 4,  # s
             "toolbar_en": True,
             "mqtt_en": False,
@@ -361,6 +368,9 @@ class FilamentBuddyPlugin(
         INACTIVE = 0,
         WAIT_FOR_INSERTING = 1,
         WAIT_FOR_REMOVING = 2
+
+    def is_api_protected(self) -> bool:
+        return False
 
     def get_assets(self):
         return {
