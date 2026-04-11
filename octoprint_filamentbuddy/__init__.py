@@ -68,31 +68,33 @@ class FilamentBuddyPlugin(
 
         mode = self.__get_string("fs", "sensor_mode")
 
+        sensor_class = None
         if mode == "p_polling":
-            self.__fs_manager = PeripheryPollingFilamentSensor(
-                self._logger,
-                self.__runout_action,
-                self.__get_int("fs", "sensor_pin"),
-                self.__get_int("fs", "polling_time"),
-                self.__get_int("fs", "run_out_time"),
-                self.__get_string("fs", "empty_voltage"),
-                self.__get_bool("fs", "invert_pull")
-            )
-            self.__enable_if_printing()
-            return
+            sensor_class = PeripheryPollingFilamentSensor
+        elif mode == "b_polling":
+            sensor_class = BlinkaPollingFilamentSensor
 
-        if mode == "b_polling":
-            self.__fs_manager = BlinkaPollingFilamentSensor(
-                self._logger,
-                self.__runout_action,
-                self.__get_int("fs", "sensor_pin"),
-                self.__get_int("fs", "polling_time"),
-                self.__get_int("fs", "run_out_time"),
-                self.__get_string("fs", "empty_voltage"),
-                self.__get_bool("fs", "invert_pull")
-            )
-            self.__enable_if_printing()
-            return
+        if sensor_class is not None:
+            try:
+                self.__fs_manager = sensor_class(
+                    self._logger,
+                    self.__runout_action,
+                    self.__get_int("fs", "sensor_pin"),
+                    self.__get_int("fs", "polling_time"),
+                    self.__get_int("fs", "run_out_time"),
+                    self.__get_string("fs", "empty_voltage"),
+                    self.__get_bool("fs", "invert_pull")
+                )
+                self.__enable_if_printing()
+                return
+            except GPIONotFoundException:
+                self._logger.warning(f"GPIO library for mode '{mode}' unavailable, disabling Filament Sensor")
+                self.__send_notification(
+                    "Filament Sensor disabled: the required GPIO library could not be loaded. "
+                    "Check that it is installed and that the GPIO daemon is running.",
+                    True
+                )
+                return
 
         if mode in ["interrupt", "polling"]:
             self._logger.info("Interrupt and polling modes have been deprecated")
@@ -183,7 +185,7 @@ class FilamentBuddyPlugin(
                     self.__send_notification("Filament not found, starting run out timeout")
             return
 
-        if event in (Events.PRINT_DONE, Events.PRINT_FAILED):
+        if event in (Events.PRINT_DONE, Events.PRINT_FAILED, Events.PRINT_CANCELLED):
             if self.__fs_manager is not None:
                 self.__fs_manager.stop_checking()
             if self.__get_bool("fr", "en"):
@@ -285,7 +287,10 @@ class FilamentBuddyPlugin(
         return float(self.__get_raw_value(source, param))
 
     def __get_bool(self, source: Literal["fc", "fs", "fr"], param: str) -> bool:
-        return bool(self.__get_raw_value(source, param))
+        value = self.__get_raw_value(source, param)
+        if isinstance(value, str):
+            return value.lower() == "true"
+        return bool(value)
 
     def __get_string(self, source: Literal["fc", "fs", "fr"], param: str) -> str:
         return str(self.__get_raw_value(source, param))

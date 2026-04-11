@@ -14,8 +14,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from re import fullmatch
-import digitalio
-import board
 from .AbstractPollingFilamentSensorManager import AbstractPollingFilamentSensorManager
 from .support import GPIONotFoundException
 
@@ -26,6 +24,9 @@ class BlinkaPollingFilamentSensor(AbstractPollingFilamentSensorManager):
 
         pin_attr = f"D{pin}"
         try:
+            import digitalio
+            import board
+
             if not hasattr(board, pin_attr):
                 self._log(f"Pin not found: {pin_attr}")
                 raise GPIONotFoundException()
@@ -36,7 +37,9 @@ class BlinkaPollingFilamentSensor(AbstractPollingFilamentSensorManager):
             self.__input_device.direction = digitalio.Direction.INPUT
             self.__input_device.pull = digitalio.Pull.UP if self._is_empty_high ^ self._invert_pull else digitalio.Pull.DOWN
 
-        except (AttributeError, ValueError, ImportError):
+        except GPIONotFoundException:
+            raise
+        except (ImportError, OSError, AttributeError, ValueError):
             raise GPIONotFoundException()
 
         self.__available_pins = [int(attr[1:]) for attr in dir(board) if fullmatch(r"D\d+", attr)]

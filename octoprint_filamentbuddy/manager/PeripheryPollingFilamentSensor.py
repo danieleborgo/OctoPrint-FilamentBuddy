@@ -13,8 +13,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from periphery import GPIO
-
 from .AbstractPollingFilamentSensorManager import AbstractPollingFilamentSensorManager
 from .support import GPIONotFoundException
 
@@ -23,13 +21,14 @@ class PeripheryPollingFilamentSensor(AbstractPollingFilamentSensorManager):
     def __init__(self, logger, runout_f, pin: int, polling_time: int, runout_time: int, empty_v: str, invert_pull: bool):
         super().__init__(logger, runout_f, polling_time, runout_time, empty_v, invert_pull)
         try:
+            from periphery import GPIO
             self.__input_device = GPIO(
                 "/dev/gpiochip0",
                 pin,
                 "in",
                 bias="pull_up" if self._is_empty_high ^ self._invert_pull else "pull_down"
             )
-        except ImportError:
+        except (ImportError, OSError):
             raise GPIONotFoundException()
 
         self._log("Periphery polling successfully initialized")
