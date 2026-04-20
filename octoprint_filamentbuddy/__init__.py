@@ -19,14 +19,20 @@ try:
 except ImportError:
     from typing_extensions import Literal
 
+import threading
 from enum import Enum
-from flask import jsonify
+from flask import abort, jsonify
 from paho.mqtt import client as mqtt
 
 import octoprint.plugin
 from octoprint.events import Events
 
-from .manager import *
+from .manager import (
+    is_gpio_available,
+    GPIONotFoundException,
+    PeripheryPollingFilamentSensor,
+    BlinkaPollingFilamentSensor,
+)
 
 
 class FilamentBuddyPlugin(
@@ -100,7 +106,7 @@ class FilamentBuddyPlugin(
             self._logger.info("Interrupt and polling modes have been deprecated")
             return
 
-        raise Exception(f"Implementation error: unknown FS type: {mode}")
+        raise ValueError(f"Unknown sensor mode: {mode!r}")
 
     def __runout_action(self):
         if self.__get_bool("fs", "use_pause"):
@@ -109,7 +115,7 @@ class FilamentBuddyPlugin(
             [c.strip() for c in self.__get_string("fs", "run_out_command").split("\n")]
         )
         self.__send_notification("The filament has run out", True)
-        self.__send_mqtt_if_en()
+        threading.Thread(target=self.__send_mqtt_if_en, daemon=True).start()
 
     def __send_mqtt_if_en(self):
         if not self.__get_bool("fs", "mqtt_en"):
@@ -120,6 +126,11 @@ class FilamentBuddyPlugin(
         port = self.__get_int("fs", "mqtt_port")
         topic = self.__get_string("fs", "mqtt_topic")
         message = self.__get_string("fs", "mqtt_message_string").encode('utf-8')
+
+        if not address or not (1 <= port <= 65535):
+            self._logger.warning(f"Invalid MQTT address or port: {address!r}:{port}")
+            self.__send_notification("Invalid MQTT address or port, message not sent")
+            return
 
         self._logger.info(f"Preparing to send MQTT message from {client_id} to {address}:{port}/{topic}")
 
@@ -133,17 +144,22 @@ class FilamentBuddyPlugin(
 
         try:
             client.connect(address, port)
-            client.loop_start()
+        except OSError:
+            self._logger.info("Impossible to connect to MQTT broker")
+            self.__send_notification("Impossible to connect to MQTT broker")
+            return
+
+        client.loop_start()
+        try:
             info = client.publish(
                 topic=topic,
                 payload=message,
                 qos=0,
             )
-            info.wait_for_publish()
+            info.wait_for_publish(timeout=10)
+        finally:
             client.disconnect()
-        except ConnectionRefusedError:
-            self._logger.info("Impossible to connect to MQTT broker")
-            self.__send_notification("Impossible to connect to MQTT broker")
+            client.loop_stop()
 
     def __enable_if_printing(self):
         if self._printer.is_printing():
@@ -203,18 +219,17 @@ class FilamentBuddyPlugin(
                 'T0' not in parsed_temperatures or
                 not isinstance(parsed_temperatures['T0'], tuple) or
                 len(parsed_temperatures['T0']) != 2 or
+                parsed_temperatures['T0'][0] is None or
                 parsed_temperatures['T0'][1] is None):
             return parsed_temperatures
 
         current_t, target_t = parsed_temperatures['T0']
-        # self._logger.info(f"Tc: {current_t}°C, Tt: {target_t}°C, {self.__fr_state}")
 
         if self.__fr_state == FilamentBuddyPlugin.FRState.WAIT_FOR_INSERTING:
             if current_t > self.__get_int("fr", "min_needed_temp"):
                 self.__insert_filament()
                 self.__fr_state = FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING
-        else:
-            # Necessarily WAIT_FOR_REMOVAL
+        elif self.__fr_state == FilamentBuddyPlugin.FRState.WAIT_FOR_REMOVING:
             if target_t < FilamentBuddyPlugin.REMOVING_TARGET_MIN_T:
                 self.__remove_filament()
                 self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
@@ -268,8 +283,8 @@ class FilamentBuddyPlugin(
             self.__send_mqtt_if_en()
             return jsonify({})
 
-        self._logger.info("API request unknown: " + command)
-        return None
+        self._logger.info(f"API request unknown: {command}")
+        return abort(400)
 
     def __send_notification(self, message: str, is_severe: bool = False):
         self._plugin_manager.send_plugin_message("filamentbuddy", {"message": message, "is_severe": is_severe})
@@ -370,12 +385,12 @@ class FilamentBuddyPlugin(
         self.__reset_plugin()
 
     class FRState(Enum):
-        INACTIVE = 0,
-        WAIT_FOR_INSERTING = 1,
+        INACTIVE = 0
+        WAIT_FOR_INSERTING = 1
         WAIT_FOR_REMOVING = 2
 
     def is_api_protected(self) -> bool:
-        return False
+        return True
 
     def get_assets(self):
         return {

@@ -52,10 +52,10 @@ class BlinkaPollingFilamentSensor(AbstractPollingFilamentSensorManager):
         return self.__available_pins[:]
 
     def is_currently_available(self):
-        return bool(self.__input_device.value) ^ self._is_empty_high
+        return bool(self.__input_device.value ^ self._is_empty_high)
 
     def _close_sensor(self):
         try:
             self.__input_device.deinit()
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            self._log(f"Failed to release GPIO: {e}")

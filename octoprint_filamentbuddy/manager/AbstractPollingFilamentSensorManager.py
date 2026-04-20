@@ -13,7 +13,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 from abc import abstractmethod
-from threading import Event
+from threading import Event, Lock
 
 from .GenericFilamentSensorManager import GenericFilamentSensorManager
 
@@ -28,23 +28,26 @@ class AbstractPollingFilamentSensorManager(GenericFilamentSensorManager):
         self.__runout_time = runout_time
         self._is_empty_high = "high".__eq__(empty_v.lower())
         self._invert_pull = invert_pull
-        self.__event = None
+        self.__event = Event()
         self.__running = False
         self.__verifying = False
+        self.__lock = Lock()
 
     def start_checking(self):
-        if self.__running:
-            return
-        self.__running = True
-        self.__event = Event()
+        with self.__lock:
+            if self.__running:
+                return
+            self.__running = True
+            self.__event.clear()
         self._log("Filament Sensor via polling started")
         self._submit(self.__perform_polling)
 
     def stop_checking(self):
-        if not self.__running:
-            return
-        self.__running = False
-        self.__verifying = False
+        with self.__lock:
+            if not self.__running:
+                return
+            self.__running = False
+            self.__verifying = False
         self.__event.set()
         self._log("Filament Sensor via polling stopped")
 
@@ -56,16 +59,18 @@ class AbstractPollingFilamentSensorManager(GenericFilamentSensorManager):
 
             # if the filament becomes unavailable
             if not self.is_currently_available():
-                self.__verifying = True
+                with self.__lock:
+                    self.__verifying = True
                 count = 0
                 self.__event.wait(AbstractPollingFilamentSensorManager.VERIFYING_TIME)
                 self._log("First missing filament")
                 while self.__verifying:
                     if self.is_currently_available():
                         # the filament came back before the deadline
-                        self.__verifying = False
+                        with self.__lock:
+                            self.__verifying = False
                         self._log("Filament has returned")
-                        continue
+                        break
                     if count * AbstractPollingFilamentSensorManager.VERIFYING_TIME >= self.__runout_time:
                         self._log("Run out time passed, printer paused")
                         self._runout()

@@ -37,7 +37,9 @@ plugin_license = "GPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
 plugin_requires = [
-    "OctoPrint>=1.7.2", "flask>=2.2.3", "paho-mqtt>=1.6.1", "python-periphery", "adafruit_blinka"
+    "OctoPrint>=1.8.0", "flask>=2.2.3", "paho-mqtt>=1.6.1",
+    'python-periphery; sys_platform == "linux"',
+    'adafruit-blinka; sys_platform == "linux"',
 ]
 
 # --------------------------------------------------------------------------------------------------------------------

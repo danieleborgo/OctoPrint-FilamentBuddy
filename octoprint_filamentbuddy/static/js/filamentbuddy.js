@@ -25,11 +25,27 @@ $(function () {
         self.temperatureViewModel = parameters[2];
 
         self.filamentbuddy = undefined;
+        self._subscriptions = [];
+        self._mqttUnsaved = ko.observable(false);
+
         self.onBeforeBinding = function () {
             self.filamentbuddy = self.settingsViewModel.settings.plugins.filamentbuddy;
         };
 
+        self.onSettingsShown = function () {
+            self._mqttUnsaved(false);
+        };
+
+        self.onSettingsBeforeSave = function () {
+            self._mqttUnsaved(false);
+        };
+
         self.onAfterBinding = function () {
+            self._subscriptions.forEach(s => s.dispose());
+            self._subscriptions = [];
+
+            const markMqttUnsaved = fn => (...args) => { self._mqttUnsaved(true); fn(...args); };
+
             if(self.filamentbuddy.first_startup()){
                 self.filamentbuddy.first_startup(false);
                 self.settingsViewModel.saveData();
@@ -42,66 +58,74 @@ $(function () {
 
             // Filament changer
             self.server_fc_en(self.filamentbuddy.fc.en());
-            self.filamentbuddy.fc.en.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.command_mode.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.command.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.force_cold.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.filament_length.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.filament_speed.subscribe(self.regenerateFilamentChanger)
-            self.filamentbuddy.fc.target_x.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.target_y.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.z_hop.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.unload_command.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.load_command.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.use_unload.subscribe(self.regenerateFilamentChanger);
-            self.filamentbuddy.fc.filament_length.subscribe(
-                value => self.filamentbuddy.fc.filament_length(self.makeInteger(value))
-            );
-            self.filamentbuddy.fc.filament_speed.subscribe(
-                value => self.filamentbuddy.fc.filament_speed(self.makeInteger(value))
-            )
-            self.filamentbuddy.fc.target_x.subscribe(
+            self._subscriptions.push(self.filamentbuddy.fc.en.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.command_mode.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.command.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.force_cold.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.target_x.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.target_y.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.z_hop.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.unload_command.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.load_command.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.use_unload.subscribe(self.regenerateFilamentChanger));
+            self._subscriptions.push(self.filamentbuddy.fc.filament_length.subscribe(value => {
+                self.filamentbuddy.fc.filament_length(self.makeInteger(value));
+                self.regenerateFilamentChanger();
+            }));
+            self._subscriptions.push(self.filamentbuddy.fc.filament_speed.subscribe(value => {
+                self.filamentbuddy.fc.filament_speed(self.makeInteger(value));
+                self.regenerateFilamentChanger();
+            }));
+            self._subscriptions.push(self.filamentbuddy.fc.target_x.subscribe(
                 value => self.filamentbuddy.fc.target_x(self.makeInteger(value))
-            );
-            self.filamentbuddy.fc.target_y.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fc.target_y.subscribe(
                 value => self.filamentbuddy.fc.target_y(self.makeInteger(value))
-            );
-            self.filamentbuddy.fc.z_hop.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fc.z_hop.subscribe(
                 value => self.filamentbuddy.fc.z_hop(self.makeInteger(value))
-            );
-            self.filamentbuddy.fc.min_tool_temp.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fc.min_tool_temp.subscribe(
                 value => self.filamentbuddy.fc.min_tool_temp(self.makeInteger(value))
-            );
+            ));
             self.regenerateFilamentChanger();
 
             // Filament sensor
-            self.filamentbuddy.fs.polling_time.subscribe(
+            self._subscriptions.push(self.filamentbuddy.fs.polling_time.subscribe(
                 value => self.filamentbuddy.fs.polling_time(self.makeInteger(value))
-            );
-            self.filamentbuddy.fs.run_out_time.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fs.run_out_time.subscribe(
                 value => self.filamentbuddy.fs.run_out_time(self.makeInteger(value))
-            );
-            self.filamentbuddy.fs.mqtt_port.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_port.subscribe(markMqttUnsaved(
                 value => self.filamentbuddy.fs.mqtt_port(self.makeInteger(value))
-            );
-            self.filamentbuddy.fs.en.subscribe(value => {
+            )));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_en.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_address.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_client_id.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_use_login.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_username.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_password.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_topic.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.mqtt_message_string.subscribe(markMqttUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.en.subscribe(value => {
                 self.stopUpdatingFilamentSensor();
                 if(value)
                     self.updateFilamentStatus();
-            });
+            }));
             if(self.filamentbuddy.fs.en())
                 self.updateFilamentStatus()
 
             // Filament remover
-            self.filamentbuddy.fr.min_needed_temp.subscribe(
+            self._subscriptions.push(self.filamentbuddy.fr.min_needed_temp.subscribe(
                 value => self.filamentbuddy.fr.min_needed_temp(self.makeInteger((value)))
-            );
-            self.filamentbuddy.fr.retract_length.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fr.retract_length.subscribe(
                 value => self.filamentbuddy.fr.retract_length(self.makeInteger(value))
-            );
-            self.filamentbuddy.fr.extrude_length.subscribe(
+            ));
+            self._subscriptions.push(self.filamentbuddy.fr.extrude_length.subscribe(
                 value => self.filamentbuddy.fr.extrude_length(self.makeInteger(value))
-            );
+            ));
         }
 
         self.sendGCode = (commands) => {
@@ -250,9 +274,9 @@ $(function () {
                 return;
             }
 
-            if(parseInt(self.filamentbuddy.fc.min_tool_temp()) >
-                self.temperatureViewModel.temperatures.tool0.actual.at(-1)[1]){
-                self.notify("Impossible to unload the filament since the tool temperature is too low");
+            const currentTemp = self.temperatureViewModel.temperatures.tool0?.actual.at(-1)?.[1] ?? null;
+            if(currentTemp === null || parseInt(self.filamentbuddy.fc.min_tool_temp()) > currentTemp){
+                self.notify("Impossible to unload the filament since the tool temperature is too low or unavailable");
                 return;
             }
 
@@ -370,8 +394,15 @@ $(function () {
         self.updateMQTTPasswordState = () => self.isMQTTPWShown(!self.isMQTTPWShown());
 
         self.testMQTTMessage = () => {
+            if (self._mqttUnsaved()) {
+                showMessageDialog({
+                    title: "Unsaved changes",
+                    message: "You have unsaved changes. Please save your settings before testing MQTT.",
+                });
+                return;
+            }
             self.askConfirmationBeforeExecuting(
-                "If you have pending modifications, these will be automatically saved.",
+                "Send a test MQTT message to the configured broker?",
                 () => {
                     $.ajax({
                         url: API_BASEURL + "plugin/filamentbuddy",
@@ -382,9 +413,14 @@ $(function () {
                             command: "test_mqtt"
                         })
                     }).done(function () {
-                        console.log("MQTT command request received by the server");
-                    }).fail(function () {
-                        console.log("The server responded badly to the MQTT test");
+                        self.notify("MQTT test message sent", self.notifyType.success);
+                    }).fail(function (xhr) {
+                        self.notify(
+                            xhr.status === 403
+                                ? "Not authorised — check you are logged in"
+                                : "Server failed to process the MQTT test",
+                            self.notifyType.error
+                        );
                     });
                 }
             );

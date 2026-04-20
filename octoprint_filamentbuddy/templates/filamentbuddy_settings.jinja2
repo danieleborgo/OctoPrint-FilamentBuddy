@@ -357,7 +357,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                             <div class="input-append">
                                 <input type="number" min="1" step="1" class="hide-text-when-disabled"
                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en() &&
-                                                          filamentbuddy.fs.sensor_mode() === 'p_polling',
+                                                          ['p_polling', 'b_polling'].includes(filamentbuddy.fs.sensor_mode()),
                                                   value: filamentbuddy.fs.polling_time">
                                 <span class="add-on unit-of-measure">s</span>
                                 <button class="info-button-for-explanation"

@@ -34,7 +34,7 @@ class PeripheryPollingFilamentSensor(AbstractPollingFilamentSensorManager):
         self._log("Periphery polling successfully initialized")
 
     def is_currently_available(self):
-        return self.__input_device.read() ^ self._is_empty_high
+        return bool(self.__input_device.read() ^ self._is_empty_high)
 
     def _close_sensor(self):
         self.__input_device.close()
