@@ -1,6 +1,6 @@
 """
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2025 Daniele Borgo
+Copyright (C) 2023-2026 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -44,6 +44,17 @@ class BlinkaPollingFilamentSensor(AbstractPollingFilamentSensorManager):
 
         self.__available_pins = [int(attr[1:]) for attr in dir(board) if fullmatch(r"D\d+", attr)]
         self._log("Blinka polling successfully initialized")
+
+    @classmethod
+    def _unavailable_reason(cls):
+        try:
+            import board  # noqa: F401
+            import digitalio  # noqa: F401
+        except ImportError:
+            return ("The Adafruit Blinka libraries (board/digitalio) are not installed or do not "
+                    "support this board.")
+        return ("Blinka is installed but the pin could not be opened. Check that the chosen pin "
+                "exists on this board.")
 
     def verify_if_pin_exists(self, pin: int) -> bool:
         return pin in self.__available_pins

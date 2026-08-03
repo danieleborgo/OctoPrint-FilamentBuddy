@@ -1,6 +1,6 @@
 """
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2025 Daniele Borgo
+Copyright (C) 2023-2026 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -15,6 +15,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from abc import ABC, abstractmethod
 from concurrent.futures.thread import ThreadPoolExecutor
+
+from .support import GPIONotFoundException, LibraryTestResult
 
 
 class GenericFilamentSensorManager(ABC):
@@ -36,6 +38,42 @@ class GenericFilamentSensorManager(ABC):
         self.__pool = ThreadPoolExecutor(max_workers=1)
         self.__logger = logger
         self.__runout_f = runout_f
+
+    @classmethod
+    def test_backend(cls, logger, *args, **kwargs) -> LibraryTestResult:
+        """
+        Fully verify that this backend works on the running system, instead of merely
+        checking that a library can be imported. It builds a real instance (which imports
+        the library and opens the GPIO line), performs an actual read and then releases
+        everything. Any failure is reported through a human-readable message, whose detail
+        is delegated to the polymorphic ``_unavailable_reason`` so each backend can explain
+        its own requirements.
+        :param logger: an instance of OctoPrint logger
+        :param args: the backend-specific constructor arguments (pin, times, ...)
+        :param kwargs: the backend-specific keyword constructor arguments (e.g. gpiochip)
+        :return: a LibraryTestResult describing the outcome
+        """
+        try:
+            manager = cls(logger, lambda: None, *args, **kwargs)
+        except GPIONotFoundException:
+            return LibraryTestResult(False, cls._unavailable_reason())
+
+        try:
+            manager.is_currently_available()
+        except Exception as e:
+            return LibraryTestResult(False, f"The backend loaded but reading the sensor failed: {e}")
+        finally:
+            manager.close()
+
+        return LibraryTestResult(True, "The library works and the sensor pin was read successfully.")
+
+    @classmethod
+    def _unavailable_reason(cls) -> str:
+        """
+        Explain why this backend is not usable on the running system. Subclasses override
+        it to point at their specific missing requirement (library, version, hardware).
+        """
+        return "The required GPIO library is not available on this system."
 
     @abstractmethod
     def start_checking(self) -> None:

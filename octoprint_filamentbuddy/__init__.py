@@ -1,6 +1,6 @@
 """
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2025 Daniele Borgo
+Copyright (C) 2023-2026 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -20,6 +20,7 @@ except ImportError:
     from typing_extensions import Literal
 
 import threading
+from copy import deepcopy
 from enum import Enum
 from flask import abort, jsonify
 from paho.mqtt import client as mqtt
@@ -30,8 +31,12 @@ from octoprint.events import Events
 from .manager import (
     is_gpio_available,
     GPIONotFoundException,
+    LibraryTestResult,
     PeripheryPollingFilamentSensor,
     BlinkaPollingFilamentSensor,
+    LibgpiodPollingFilamentSensor,
+    is_raspberry_pi,
+    list_gpiochips,
 )
 
 
@@ -50,6 +55,8 @@ class FilamentBuddyPlugin(
     def __init__(self):
         super().__init__()
         self.__is_gpio_available = is_gpio_available()
+        self.__is_raspberry_pi = is_raspberry_pi()
+        self.__gpiochips = list_gpiochips()
         self.__fs_manager = None
         self.__fr_state = FilamentBuddyPlugin.FRState.INACTIVE
 
@@ -74,23 +81,12 @@ class FilamentBuddyPlugin(
 
         mode = self.__get_string("fs", "sensor_mode")
 
-        sensor_class = None
-        if mode == "p_polling":
-            sensor_class = PeripheryPollingFilamentSensor
-        elif mode == "b_polling":
-            sensor_class = BlinkaPollingFilamentSensor
+        sensor_class = self.__sensor_class_for(mode)
 
         if sensor_class is not None:
+            args, kwargs = self.__sensor_build_args(mode)
             try:
-                self.__fs_manager = sensor_class(
-                    self._logger,
-                    self.__runout_action,
-                    self.__get_int("fs", "sensor_pin"),
-                    self.__get_int("fs", "polling_time"),
-                    self.__get_int("fs", "run_out_time"),
-                    self.__get_string("fs", "empty_voltage"),
-                    self.__get_bool("fs", "invert_pull")
-                )
+                self.__fs_manager = sensor_class(self._logger, self.__runout_action, *args, **kwargs)
                 self.__enable_if_printing()
                 return
             except GPIONotFoundException:
@@ -107,6 +103,47 @@ class FilamentBuddyPlugin(
             return
 
         raise ValueError(f"Unknown sensor mode: {mode!r}")
+
+    @staticmethod
+    def __sensor_class_for(mode: str):
+        return {
+            "p_polling": PeripheryPollingFilamentSensor,
+            "b_polling": BlinkaPollingFilamentSensor,
+            "o_polling": LibgpiodPollingFilamentSensor,
+        }.get(mode)
+
+    def __sensor_build_args(self, mode: str):
+        """Backend constructor arguments (after logger/runout_f), shared by the live manager
+        and the self-test so both exercise the exact same configuration."""
+        args = (
+            self.__get_int("fs", "sensor_pin"),
+            self.__get_int("fs", "polling_time"),
+            self.__get_int("fs", "run_out_time"),
+            self.__get_string("fs", "empty_voltage"),
+            self.__get_bool("fs", "invert_pull"),
+        )
+        kwargs = {"gpiochip": self.__get_int("fs", "gpiochip")} if mode == "o_polling" else {}
+        return args, kwargs
+
+    def __test_sensor_backend(self) -> dict:
+        """Fully verify the currently configured sensor backend and explain the result."""
+        if not self.__is_gpio_available:
+            return LibraryTestResult(False, "No GPIO interface was detected on this system.").to_dict()
+
+        mode = self.__get_string("fs", "sensor_mode")
+        sensor_class = self.__sensor_class_for(mode)
+        if sensor_class is None:
+            return LibraryTestResult(False, f"Mode {mode!r} does not use a GPIO library.").to_dict()
+
+        # A running sensor already holds the line; re-opening it would fail as "busy", so the
+        # fact that it is active is itself the proof that the backend works.
+        if self.__fs_manager is not None and isinstance(self.__fs_manager, sensor_class):
+            return LibraryTestResult(
+                True, "The Filament Sensor is currently enabled and running correctly."
+            ).to_dict()
+
+        args, kwargs = self.__sensor_build_args(mode)
+        return sensor_class.test_backend(self._logger, *args, **kwargs).to_dict()
 
     def __runout_action(self):
         if self.__get_bool("fs", "use_pause"):
@@ -269,7 +306,8 @@ class FilamentBuddyPlugin(
     def get_api_commands(self):
         return dict(
             filament_status=[],
-            test_mqtt=[]
+            test_mqtt=[],
+            test_sensor=[]
         )
 
     def on_api_command(self, command, data):
@@ -282,6 +320,9 @@ class FilamentBuddyPlugin(
         if command == "test_mqtt":
             self.__send_mqtt_if_en()
             return jsonify({})
+
+        if command == "test_sensor":
+            return jsonify(self.__test_sensor_backend())
 
         self._logger.info(f"API request unknown: {command}")
         return abort(400)
@@ -335,6 +376,8 @@ class FilamentBuddyPlugin(
             "en": False,
             "sensor_pin": 8,
             "sensor_mode": "p_polling",
+            "gpiochip": 0,
+            "unlock_pin_range": False,
             "polling_time": 10,  # s
             "run_out_time": 60,  # s
             "use_pause": True,
@@ -369,18 +412,30 @@ class FilamentBuddyPlugin(
         }
     }
 
+    def __board_adjusted_defaults(self):
+        # unlock_pin_range can't be a static default: it depends on the running board, so it
+        # is auto-enabled on anything that isn't a Raspberry Pi.
+        defaults = deepcopy(FilamentBuddyPlugin.DEFAULT_SETTINGS)
+        defaults["fs"]["unlock_pin_range"] = not self.__is_raspberry_pi
+        return defaults
+
     def get_settings_defaults(self):
+        defaults = self.__board_adjusted_defaults()
         return {
-            **FilamentBuddyPlugin.DEFAULT_SETTINGS,
+            **defaults,
             **{
                 "is_gpio_available": self.__is_gpio_available,
-                "default": FilamentBuddyPlugin.DEFAULT_SETTINGS
+                "is_raspberry_pi": self.__is_raspberry_pi,
+                "gpiochips": self.__gpiochips,
+                "default": defaults
             }
         }
 
     def on_settings_save(self, data):
         data["is_gpio_available"] = self.__is_gpio_available
-        data["default"] = FilamentBuddyPlugin.DEFAULT_SETTINGS
+        data["is_raspberry_pi"] = self.__is_raspberry_pi
+        data["gpiochips"] = self.__gpiochips
+        data["default"] = self.__board_adjusted_defaults()
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
         self.__reset_plugin()
 

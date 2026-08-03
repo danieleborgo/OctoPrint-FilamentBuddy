@@ -1,6 +1,6 @@
 """
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2025 Daniele Borgo
+Copyright (C) 2023-2026 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -32,6 +32,16 @@ class PeripheryPollingFilamentSensor(AbstractPollingFilamentSensorManager):
             raise GPIONotFoundException()
 
         self._log("Periphery polling successfully initialized")
+
+    @classmethod
+    def _unavailable_reason(cls):
+        try:
+            import periphery  # noqa: F401
+        except ImportError:
+            return ("The 'python-periphery' library is not installed. It is only installed on "
+                    "Linux systems.")
+        return ("python-periphery is installed but the GPIO could not be opened. Check the pin "
+                "number and that /dev/gpiochip0 exists and is accessible.")
 
     def is_currently_available(self):
         return bool(self.__input_device.read() ^ self._is_empty_high)

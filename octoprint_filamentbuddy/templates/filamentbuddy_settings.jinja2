@@ -1,6 +1,6 @@
 <!--
 FilamentBuddy OctoPrint plugin
-Copyright (C) 2025 Daniele Borgo
+Copyright (C) 2023-2026 Daniele Borgo
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -311,15 +311,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         </div>
                     </div>
 
+                    <!-- ko ifnot: filamentbuddy.fs.sensor_mode() === 'o_polling' -->
                     <div class="control-group">
                         <label class="control-label">BCM sensor pin</label>
                         <div class="controls">
                             <label>
                                 GPIO
-                                <input type="number" min="0" step="1" max="40"
+                                <!-- ko if: filamentbuddy.fs.unlock_pin_range -->
+                                <input type="number" min="0" step="1"
                                        class="input-large hide-text-when-disabled"
                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
                                                   value: filamentbuddy.fs.sensor_pin">
+                                <!-- /ko -->
+                                <!-- ko ifnot: filamentbuddy.fs.unlock_pin_range -->
+                                <select class="input-large hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
+                                                   options: pin_options,
+                                                   value: filamentbuddy.fs.sensor_pin"></select>
+                                <!-- /ko -->
                                 <button class="info-button-for-explanation"
                                         data-bind="click: showInfo.bind($data, 'fs.sensor_pin')">
                                     &#9432;
@@ -332,6 +341,67 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                             </label>
                         </div>
                     </div>
+                    <!-- /ko -->
+
+                    <!-- ko if: filamentbuddy.fs.sensor_mode() === 'o_polling' -->
+                    <div class="control-group">
+                        <label class="control-label">GPIO chip</label>
+                        <div class="controls">
+                            <label>
+                                <!-- ko if: filamentbuddy.gpiochips().length -->
+                                <select class="hide-text-when-disabled"
+                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
+                                                   options: filamentbuddy.gpiochips,
+                                                   optionsText: function(i){ return '/dev/gpiochip' + i; },
+                                                   value: filamentbuddy.fs.gpiochip"></select>
+                                <!-- /ko -->
+                                <!-- ko ifnot: filamentbuddy.gpiochips().length -->
+                                /dev/gpiochip<input type="number" min="0" step="1"
+                                       class="input-mini hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
+                                                  value: filamentbuddy.fs.gpiochip">
+                                <!-- /ko -->
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.gpiochip')">
+                                    &#9432;
+                                </button>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Line offset</label>
+                        <div class="controls">
+                            <label>
+                                <input type="number" min="0" step="1"
+                                       class="input-large hide-text-when-disabled"
+                                       data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
+                                                  value: filamentbuddy.fs.sensor_pin">
+                                <button class="info-button-for-explanation"
+                                        data-bind="click: showInfo.bind($data, 'fs.sensor_pin')">
+                                    &#9432;
+                                </button>
+                            </label>
+                            <label>
+                                The chip-relative line offset. Find the chip and offset with
+                                <code>gpiodetect</code> and <code>gpioinfo</code>.
+                            </label>
+                        </div>
+                    </div>
+                    <!-- /ko -->
+
+                    <!-- ko ifnot: filamentbuddy.fs.sensor_mode() === 'o_polling' -->
+                    <div class="control-group">
+                        <div class="controls">
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en(),
+                                                  checked: filamentbuddy.fs.unlock_pin_range">
+                                Unlock pin range (required for Compute Modules or non-Raspberry Pi hardware)
+                            </label>
+                        </div>
+                    </div>
+                    <!-- /ko -->
 
                     <div class="control-group">
                         <label class="control-label">Sensor mode</label>
@@ -342,6 +412,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                                    value: filamentbuddy.fs.sensor_mode">
                                     <option value="p_polling">Periphery Polling</option>
                                     <option value="b_polling">Adafruit Blinka Polling</option>
+                                    <option value="o_polling">Orange Pi / libgpiod Polling</option>
                                 </select>
                                 <button class="info-button-for-explanation"
                                         data-bind="click: showInfo.bind($data, 'fs.sensor_mode')">
@@ -351,13 +422,33 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         </div>
                     </div>
 
-                    <div class="control-group" data-bind="visible: ['p_polling', 'b_polling'].includes(filamentbuddy.fs.sensor_mode())">
+                    <div class="control-group" data-bind="visible: ['p_polling', 'b_polling', 'o_polling'].includes(filamentbuddy.fs.sensor_mode())">
+                        <div class="controls">
+                            <button class="btn"
+                                    data-bind="enable: filamentbuddy.is_gpio_available() && !fsChecking(),
+                                               click: testSensorBackend">
+                                <span data-bind="visible: !fsChecking()">Test selected backend</span>
+                                <span data-bind="visible: fsChecking()">Testing...</span>
+                            </button>
+                            <button class="info-button-for-explanation"
+                                    data-bind="click: showInfo.bind($data, 'fs.test_sensor')">
+                                &#9432;
+                            </button>
+                            <div style="margin-top: 6px;"
+                                 data-bind="visible: fsCheckMessage().length > 0, text: fsCheckMessage,
+                                            css: { 'text-success': fsCheckSuccess() === true,
+                                                   'text-error': fsCheckSuccess() === false }">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" data-bind="visible: ['p_polling', 'b_polling', 'o_polling'].includes(filamentbuddy.fs.sensor_mode())">
                         <label class="control-label">Polling time</label>
                         <div class="controls">
                             <div class="input-append">
                                 <input type="number" min="1" step="1" class="hide-text-when-disabled"
                                        data-bind="enable: filamentbuddy.is_gpio_available() && filamentbuddy.fs.en() &&
-                                                          ['p_polling', 'b_polling'].includes(filamentbuddy.fs.sensor_mode()),
+                                                          ['p_polling', 'b_polling', 'o_polling'].includes(filamentbuddy.fs.sensor_mode()),
                                                   value: filamentbuddy.fs.polling_time">
                                 <span class="add-on unit-of-measure">s</span>
                                 <button class="info-button-for-explanation"

@@ -58,9 +58,26 @@ The feature also provides:
 
 - A toolbar indicator showing live filament presence.
 - An optional MQTT notification when the filament runs out.
+- A **Test selected backend** button that loads the chosen GPIO library, opens
+  the configured pin and reads it once, reporting whether the backend works or,
+  on failure, why (missing library, unsupported Python version, inaccessible pin).
 
-Supported sensor backends: **Periphery** (`p_polling`) and
-**Adafruit Blinka** (`b_polling`). Both require a GPIO-capable board.
+Supported sensor backends: **Periphery** (`p_polling`), **Adafruit Blinka**
+(`b_polling`) and **Orange Pi / libgpiod** (`o_polling`). All require a
+GPIO-capable board.
+
+The `o_polling` backend targets modern SBCs (Orange Pi 4 Pro and others) whose
+GPIO is exposed as character devices `/dev/gpiochipN`. Unlike the other two it
+does not use BCM numbering: you select the **GPIO chip** and the **line offset**
+within it explicitly. Find both with `gpiodetect` (lists the chips) and
+`gpioinfo` (lists the lines per chip). It requires `gpiod ≥ 2.0`, and therefore
+Python ≥ 3.9; a board still shipping the older `gpiod` v1 bindings — or an
+OctoPrint running on Python 3.7 — will report the sensor as unavailable rather
+than misbehaving.
+
+On non-Raspberry Pi hardware the pin field is automatically unlocked (no BCM
+range limit); the **Unlock pin range** advanced checkbox toggles this manually,
+e.g. for Raspberry Pi Compute Modules.
 
 > **Raspberry Pi GPIO voltage:** the GPIO pins operate at **3.3 V**. Never
 > connect a sensor that outputs 5 V directly to a GPIO pin without a level
@@ -97,6 +114,7 @@ flag if needed.
 | Raspberry Pi or GPIO-capable board | Required for Filament Sensor only |
 | `python-periphery` | Required for the `p_polling` sensor mode |
 | `adafruit-blinka` + platform packages | Required for the `b_polling` sensor mode |
+| `gpiod` ≥ 2.0 (needs Python ≥ 3.9) | Required for the `o_polling` (Orange Pi / libgpiod) sensor mode |
 
 The Python packages listed above are declared as optional dependencies and are
 installed automatically by the OctoPrint plugin manager. However, Adafruit
@@ -195,7 +213,8 @@ The filament sensor is designed to be extensible. The abstract class
 GenericFilamentSensorManager          (abstract, thread pool, logging)
   └── AbstractPollingFilamentSensorManager  (abstract, polling loop, runout timer)
         ├── PeripheryPollingFilamentSensor  (Periphery backend)
-        └── BlinkaPollingFilamentSensor     (Adafruit Blinka backend)
+        ├── BlinkaPollingFilamentSensor     (Adafruit Blinka backend)
+        └── LibgpiodPollingFilamentSensor   (Orange Pi / libgpiod v2 backend)
 ```
 
 To add a new backend, extend `AbstractPollingFilamentSensorManager` and

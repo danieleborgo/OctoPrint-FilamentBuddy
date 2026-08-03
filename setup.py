@@ -16,7 +16,7 @@ plugin_package = "octoprint_" + plugin_identifier
 plugin_name = "FilamentBuddy"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "0.2.0"
+plugin_version = "0.3.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -40,6 +40,7 @@ plugin_requires = [
     "OctoPrint>=1.8.0", "flask>=2.2.3", "paho-mqtt>=1.6.1",
     'python-periphery; sys_platform == "linux"',
     'adafruit-blinka; sys_platform == "linux"',
+    'gpiod>=2.0; sys_platform == "linux" and python_version >= "3.9"',
 ]
 
 # --------------------------------------------------------------------------------------------------------------------

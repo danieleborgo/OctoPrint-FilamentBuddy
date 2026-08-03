@@ -1,6 +1,6 @@
 /*
  * FilamentBuddy OctoPrint plugin
- * Copyright (C) 2025 Daniele Borgo
+ * Copyright (C) 2023-2026 Daniele Borgo
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,20 @@ $(function () {
         self.filamentbuddy = undefined;
         self._subscriptions = [];
         self._mqttUnsaved = ko.observable(false);
+        self._fsUnsaved = ko.observable(false);
+
+        // Sensor backend self-test state (shown in the advanced section).
+        self.fsChecking = ko.observable(false);
+        self.fsCheckMessage = ko.observable("");
+        self.fsCheckSuccess = ko.observable(null);
+
+        // Valid BCM pins for the bounded selector shown when the pin range is locked (Raspberry Pi).
+        self.pin_options = (() => {
+            let pins = [];
+            for (let i = 2; i <= 27; i++)
+                pins.push(i);
+            return pins;
+        })();
 
         self.onBeforeBinding = function () {
             self.filamentbuddy = self.settingsViewModel.settings.plugins.filamentbuddy;
@@ -34,10 +48,12 @@ $(function () {
 
         self.onSettingsShown = function () {
             self._mqttUnsaved(false);
+            self._fsUnsaved(false);
         };
 
         self.onSettingsBeforeSave = function () {
             self._mqttUnsaved(false);
+            self._fsUnsaved(false);
         };
 
         self.onAfterBinding = function () {
@@ -45,6 +61,7 @@ $(function () {
             self._subscriptions = [];
 
             const markMqttUnsaved = fn => (...args) => { self._mqttUnsaved(true); fn(...args); };
+            const markFsUnsaved = fn => (...args) => { self._fsUnsaved(true); fn(...args); };
 
             if(self.filamentbuddy.first_startup()){
                 self.filamentbuddy.first_startup(false);
@@ -91,12 +108,21 @@ $(function () {
             self.regenerateFilamentChanger();
 
             // Filament sensor
+            self._subscriptions.push(self.filamentbuddy.fs.sensor_pin.subscribe(markFsUnsaved(
+                value => self.filamentbuddy.fs.sensor_pin(self.makeInteger(value))
+            )));
+            self._subscriptions.push(self.filamentbuddy.fs.gpiochip.subscribe(markFsUnsaved(
+                value => self.filamentbuddy.fs.gpiochip(self.makeInteger(value))
+            )));
             self._subscriptions.push(self.filamentbuddy.fs.polling_time.subscribe(
                 value => self.filamentbuddy.fs.polling_time(self.makeInteger(value))
             ));
             self._subscriptions.push(self.filamentbuddy.fs.run_out_time.subscribe(
                 value => self.filamentbuddy.fs.run_out_time(self.makeInteger(value))
             ));
+            self._subscriptions.push(self.filamentbuddy.fs.sensor_mode.subscribe(markFsUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.empty_voltage.subscribe(markFsUnsaved(_ => {})));
+            self._subscriptions.push(self.filamentbuddy.fs.invert_pull.subscribe(markFsUnsaved(_ => {})));
             self._subscriptions.push(self.filamentbuddy.fs.mqtt_port.subscribe(markMqttUnsaved(
                 value => self.filamentbuddy.fs.mqtt_port(self.makeInteger(value))
             )));
@@ -426,6 +452,40 @@ $(function () {
             );
         }
 
+        self.testSensorBackend = () => {
+            if (self._fsUnsaved()) {
+                showMessageDialog({
+                    title: "Unsaved changes",
+                    message: "You have unsaved changes. Please save your settings before testing the sensor.",
+                });
+                return;
+            }
+            self.fsChecking(true);
+            self.fsCheckMessage("");
+            self.fsCheckSuccess(null);
+            $.ajax({
+                url: API_BASEURL + "plugin/filamentbuddy",
+                type: "POST",
+                dataType: "json",
+                contentType: "application/json; charset=UTF-8",
+                data: JSON.stringify({
+                    command: "test_sensor"
+                })
+            }).done(function (data) {
+                self.fsCheckSuccess(data.available);
+                self.fsCheckMessage(data.message);
+            }).fail(function (xhr) {
+                self.fsCheckSuccess(false);
+                self.fsCheckMessage(
+                    xhr.status === 403
+                        ? "Not authorised — check you are logged in"
+                        : "Server failed to run the sensor test"
+                );
+            }).always(function () {
+                self.fsChecking(false);
+            });
+        }
+
         self.resetFilamentSensor = () => {
             self.requireReset(() => {
                 let def = self.filamentbuddy.default;
@@ -433,6 +493,8 @@ $(function () {
                 self.filamentbuddy.fs.en(def.fs.en());
                 self.filamentbuddy.fs.sensor_pin(def.fs.sensor_pin());
                 self.filamentbuddy.fs.sensor_mode(def.fs.sensor_mode());
+                self.filamentbuddy.fs.gpiochip(def.fs.gpiochip());
+                self.filamentbuddy.fs.unlock_pin_range(def.fs.unlock_pin_range());
                 self.filamentbuddy.fs.polling_time(def.fs.polling_time());
                 self.filamentbuddy.fs.run_out_time(def.fs.run_out_time());
                 self.filamentbuddy.fs.use_pause(def.fs.use_pause());
@@ -538,12 +600,21 @@ $(function () {
             },
             "fs": {
                 "sensor_pin": [
-                    "BCM sensor pin",
-                    "The filament sensor has to be connected to a Raspberry GPIO pin in order to inject its status " +
-                    "in OctoPrint, and it is here defined. It requires to be in BCM format, so the one in which the " +
-                    "name starts with <i>GPIO</i>.<br> This <a target='_blank' href='https://plugins.octoprint.org/" +
-                    "plugins/gpiostatus/'>plugin</a> shows the GPIO and the pins names, but it can be selected " +
-                    "with just the Raspberry documentation."
+                    "Sensor pin",
+                    "The pin the filament sensor is connected to.<br>" +
+                    "For <b>Periphery</b> and <b>Adafruit Blinka</b> polling this is the Raspberry GPIO pin in BCM " +
+                    "format (the one whose name starts with <i>GPIO</i>); this <a target='_blank' href='https://" +
+                    "plugins.octoprint.org/plugins/gpiostatus/'>plugin</a> shows the GPIO and pin names.<br>" +
+                    "For <b>Orange Pi / libgpiod</b> polling this is instead the <i>line offset</i> within the " +
+                    "selected GPIO chip: find the chip and offset with <code>gpiodetect</code> and " +
+                    "<code>gpioinfo</code>."
+                ],
+                "gpiochip": [
+                    "GPIO chip",
+                    "Only used by the <b>Orange Pi / libgpiod</b> mode. Modern boards expose their GPIO as one or " +
+                    "more character devices <code>/dev/gpiochipN</code>; this selects which chip the sensor line " +
+                    "belongs to. Run <code>gpiodetect</code> to list the available chips and <code>gpioinfo</code> " +
+                    "to find the line offset to enter as the sensor pin."
                 ],
                 "sensor_mode": [
                     "Sensor mode",
@@ -553,11 +624,22 @@ $(function () {
                     //"executed only when the pin state changes.</li>
                     "<li>Periphery polling: periodically checks the filament through Periphery Python module.</li>" +
                     "<li>Adafruit Blinka polling: same as the previous but through a different module.</li>" +
+                    "<li>Orange Pi / libgpiod polling: same approach through libgpiod v2, for modern SBCs (Orange " +
+                    "Pi and others) that expose their GPIO as <code>/dev/gpiochipN</code>. Requires gpiod &gt;= 2.0 " +
+                    "and lets the chip and line offset be selected explicitly.</li>" +
                     "</ul>" +
                     "Both these methods suppose to have the pin permanently in a state when the filament is " +
                     "available and permanently in the other when it is not.<br>" +
                     "The plugin doesn't stop immediately the print when the filament becomes unavailable but wait " +
                     "for a user defined time to avoid errors."
+                ],
+                "test_sensor": [
+                    "Test selected backend",
+                    "This actually verifies the selected sensor backend on this machine: it loads the library, " +
+                    "opens the configured pin (and GPIO chip, for libgpiod) and reads it once, then releases it. " +
+                    "On success it confirms the backend works; on failure it explains why, for example a missing " +
+                    "library, an unsupported Python version or an inaccessible pin.<br><br>" +
+                    "Save your settings first, since the test uses the saved configuration."
                 ],
                 "polling_time": [
                     "Polling time",
